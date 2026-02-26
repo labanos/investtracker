@@ -58,6 +58,8 @@ const PORTFOLIO = [
 ];
 
 const CACHED_FX = { USD: 6.32546, EUR: 7.471825, CAD: 4.6206, DKK: 1.0 };
+// ↑ Update CACHED_AS_OF whenever you refresh the cached prices/FX above
+const CACHED_AS_OF = new Date('2026-02-26T17:00:00');
 
 // ─── Formatters ────────────────────────────────────────────────────────────
 const n = (v, d=0) => isNaN(v)||v==null ? '–' : Math.abs(v).toLocaleString('da-DK', {minimumFractionDigits:d, maximumFractionDigits:d});
@@ -121,8 +123,10 @@ function App() {
       setPrices(newPrices);
       setFx(newFx);
       setIsLive(true);
+      setLastUpdated(new Date());           // actual time of successful fetch
     } else {
       setIsLive(false);
+      setLastUpdated(CACHED_AS_OF);         // time the cached prices were recorded
       if (Object.keys(prices).length === 0) {
         const cached = {};
         PORTFOLIO.forEach(p => { cached[p.yhTicker] = { price: p.cachedPrice, chgPct: p.cachedChg }; });
@@ -130,8 +134,6 @@ function App() {
         setFx(CACHED_FX);
       }
     }
-
-    setLastUpdated(new Date());
     setLoading(false);
     setRefreshing(false);
   }, []);
