@@ -85,14 +85,14 @@ function App() {
     const stockSyms = PORTFOLIO.map(p => p.yhTicker);
     const fxSyms    = ['USDDKK=X','EURDKK=X','CADDKK=X'];
     const symbols   = [...stockSyms, ...fxSyms].join(',');
+    const workerUrl = `https://yf-proxy.labanos.workers.dev/?symbols=${symbols}`;
     const apiUrl    = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols}&fields=regularMarketPrice,regularMarketChangePercent`;
 
-    // Try each source in order — first one that returns data wins
+    // Try worker first (Cloudflare proxy bypasses CORS/auth), then fall back
     const sources = [
+      workerUrl,                                                                  // Cloudflare Worker (primary)
       apiUrl,                                                                     // direct (works in some browsers)
       `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`,                     // proxy 1
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}`,        // proxy 2
-      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(apiUrl)}`,   // proxy 3
     ];
 
     let rows = null;
