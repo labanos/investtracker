@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Portfolio</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Portfolio">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; -webkit-tap-highlight-color: transparent; }
+    .mono { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+const { useState, useEffect, useCallback } = React;
+
+// ─── Portfolio data ────────────────────────────────────────────────────────
+// yhTicker = Yahoo Finance symbol | cachedPrice/cachedChangePct = fallback from last sync
+const PORTFOLIO = [
+  { ticker:'RGTI',     yhTicker:'RGTI',       company:'Rigetti Computing',       ccy:'USD', shares:100,  avgCost:9.91,      cachedPrice:18.82,   cachedChg:0.0675  },
+  { ticker:'LULU',     yhTicker:'LULU',       company:'Lululemon Athletica',      ccy:'USD', shares:53,   avgCost:164.97,    cachedPrice:187.38,  cachedChg:0.0265  },
+  { ticker:'NOVO-B',   yhTicker:'NOVO-B.CO',  company:'Novo Nordisk',             ccy:'DKK', shares:475,  avgCost:364.3228,  cachedPrice:239.0,   cachedChg:0.0038  },
+  { ticker:'ROCK-B',   yhTicker:'ROCK-B.CO',  company:'ROCKWOOL Class B',         ccy:'DKK', shares:375,  avgCost:173.5783,  cachedPrice:210.5,   cachedChg:-0.0071 },
+  { ticker:'JYSK',     yhTicker:'JYSK.CO',    company:'Jyske Bank',               ccy:'DKK', shares:2367, avgCost:356.1019,  cachedPrice:948.0,   cachedChg:-0.0037 },
+  { ticker:'NFLX',     yhTicker:'NFLX',       company:'Netflix',                  ccy:'USD', shares:120,  avgCost:27.697,    cachedPrice:84.17,   cachedChg:0.0189  },
+  { ticker:'CSU',      yhTicker:'CSU.TO',     company:'Constellation Software',   ccy:'CAD', shares:8,    avgCost:3161.3675, cachedPrice:2520.0,  cachedChg:0.0246  },
+  { ticker:'CHG',      yhTicker:'CHG.DE',     company:'CHAPTERS Group',           ccy:'EUR', shares:400,  avgCost:34.05,     cachedPrice:26.7,    cachedChg:-0.0220 },
+  { ticker:'AAPL',     yhTicker:'AAPL',       company:'Apple',                    ccy:'USD', shares:75,   avgCost:137.51,    cachedPrice:273.63,  cachedChg:-0.0015 },
+  { ticker:'GMAB',     yhTicker:'GMAB.CO',    company:'Genmab',                   ccy:'DKK', shares:40,   avgCost:1382.6,    cachedPrice:1831.5,  cachedChg:-0.0008 },
+  { ticker:'DANSKE',   yhTicker:'DANSKE.CO',  company:'Danske Bank',              ccy:'DKK', shares:710,  avgCost:114.7752,  cachedPrice:333.0,   cachedChg:-0.0063 },
+  { ticker:'ASML',     yhTicker:'ASML.AS',    company:'ASML Holding',             ccy:'EUR', shares:20,   avgCost:696.605,   cachedPrice:1250.6,  cachedChg:-0.0217 },
+  { ticker:'NVDA',     yhTicker:'NVDA',       company:'NVIDIA',                   ccy:'USD', shares:104,  avgCost:119.2683,  cachedPrice:188.51,  cachedChg:-0.0318 },
+  { ticker:'IONQ',     yhTicker:'IONQ',       company:'IonQ',                     ccy:'USD', shares:25,   avgCost:36.88,     cachedPrice:40.76,   cachedChg:0.2186  },
+  { ticker:'MSFT',     yhTicker:'MSFT',       company:'Microsoft',                ccy:'USD', shares:25,   avgCost:404.078,   cachedPrice:405.37,  cachedChg:0.0138  },
+  { ticker:'V',        yhTicker:'V',          company:'Visa',                     ccy:'USD', shares:20,   avgCost:229.78,    cachedPrice:319.19,  cachedChg:0.0195  },
+  { ticker:'NU',       yhTicker:'NU',         company:'Nu Holdings',              ccy:'USD', shares:800,  avgCost:12.4489,   cachedPrice:15.64,   cachedChg:-0.0541 },
+  { ticker:'BKNG',     yhTicker:'BKNG',       company:'Booking Holdings',         ccy:'USD', shares:2,    avgCost:5119.75,   cachedPrice:4251.93, cachedChg:0.0214  },
+  { ticker:'MLI',      yhTicker:'MLI',        company:'Mueller Industries',       ccy:'USD', shares:210,  avgCost:46.1674,   cachedPrice:118.27,  cachedChg:-0.0027 },
+  { ticker:'GOOGL',    yhTicker:'GOOGL',      company:'Alphabet',                 ccy:'USD', shares:120,  avgCost:95.04,     cachedPrice:305.68,  cachedChg:-0.0231 },
+  { ticker:'SNPS',     yhTicker:'SNPS',       company:'Synopsys',                 ccy:'USD', shares:40,   avgCost:437.237,   cachedPrice:432.52,  cachedChg:-0.0371 },
+  { ticker:'TSM',      yhTicker:'TSM',        company:'Taiwan Semiconductor',     ccy:'USD', shares:100,  avgCost:79.055,    cachedPrice:375.45,  cachedChg:-0.0282 },
+  { ticker:'ADBE',     yhTicker:'ADBE',       company:'Adobe',                    ccy:'USD', shares:26,   avgCost:335.74,    cachedPrice:262.32,  cachedChg:0.0121  },
+  { ticker:'QUBT',     yhTicker:'QUBT',       company:'Quantum Computing',        ccy:'USD', shares:100,  avgCost:10.31,     cachedPrice:8.95,    cachedChg:0.0346  },
+  { ticker:'MAERSK-B', yhTicker:'MAERSK-B.CO',company:'A.P. Møller-Mærsk',       ccy:'DKK', shares:15,   avgCost:11705.7333,cachedPrice:15200.0, cachedChg:-0.0095 },
+  { ticker:'NET',      yhTicker:'NET',        company:'Cloudflare',               ccy:'USD', shares:30,   avgCost:170.0,     cachedPrice:174.61,  cachedChg:0.0176  },
+  { ticker:'QBTS',     yhTicker:'QBTS',       company:'D-Wave Quantum',           ccy:'USD', shares:200,  avgCost:5.51,      cachedPrice:20.93,   cachedChg:0.0651  },
+];
+
+const CACHED_FX = { USD: 6.32546, EUR: 7.471825, CAD: 4.6206, DKK: 1.0 };
+
+// ─── Formatters ────────────────────────────────────────────────────────────
+const n = (v, d=0) => isNaN(v)||v==null ? '–' : Math.abs(v).toLocaleString('da-DK', {minimumFractionDigits:d, maximumFractionDigits:d});
+const pct = (v) => v==null||isNaN(v) ? '–' : (v>=0?'+':'−') + n(Math.abs(v*100),2) + '%';
+const signed = (v, d=0) => v==null||isNaN(v) ? '–' : (v>=0?'+':'−') + n(Math.abs(v),d);
+const clr = (v) => !v && v!==0 ? 'text-gray-400' : v > 0 ? 'text-emerald-500' : v < 0 ? 'text-red-500' : 'text-gray-400';
+
+// ─── App ───────────────────────────────────────────────────────────────────
+function App() {
+  const [prices, setPrices]       = useState({});
+  const [fx, setFx]               = useState(CACHED_FX);
+  const [loading, setLoading]     = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isLive, setIsLive]       = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [sortBy, setSortBy]       = useState('value');
+  const [notice, setNotice]       = useState(null);
+
+  const fetchPrices = useCallback(async (silent=false) => {
+    if (!silent) setLoading(true);
+    setRefreshing(true);
+
+    const stockSyms = PORTFOLIO.map(p => p.yhTicker);
+    const fxSyms    = ['USDDKK=X','EURDKK=X','CADDKK=X'];
+    const symbols   = [...stockSyms, ...fxSyms].join(',');
+    const apiUrl    = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols}&fields=regularMarketPrice,regularMarketChangePercent`;
+
+    // Try each source in order — first one that returns data wins
+    const sources = [
+      apiUrl,                                                                     // direct (works in some browsers)
+      `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`,                     // proxy 1
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}`,        // proxy 2
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(apiUrl)}`,   // proxy 3
+    ];
+
+    let rows = null;
+    for (const url of sources) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!res.ok) continue;
+        const json = await res.json();
+        const result = json?.quoteResponse?.result || [];
+        if (result.length > 0) { rows = result; break; }
+      } catch (e) { continue; }
+    }
+
+    if (rows) {
+      const newPrices = {};
+      const newFx = { ...CACHED_FX };
+      rows.forEach(q => {
+        const price  = q.regularMarketPrice;
+        const chgPct = (q.regularMarketChangePercent ?? 0) / 100;
+        if      (q.symbol === 'USDDKK=X') newFx.USD = price;
+        else if (q.symbol === 'EURDKK=X') newFx.EUR = price;
+        else if (q.symbol === 'CADDKK=X') newFx.CAD = price;
+        else newPrices[q.symbol] = { price, chgPct };
+      });
+      setPrices(newPrices);
+      setFx(newFx);
+      setIsLive(true);
+    } else {
+      setIsLive(false);
+      if (Object.keys(prices).length === 0) {
+        const cached = {};
+        PORTFOLIO.forEach(p => { cached[p.yhTicker] = { price: p.cachedPrice, chgPct: p.cachedChg }; });
+        setPrices(cached);
+        setFx(CACHED_FX);
+      }
+    }
+
+    setLastUpdated(new Date());
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
+
+  useEffect(() => {
+    fetchPrices();
+    const iv = setInterval(() => fetchPrices(true), 5 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Enrich each position
+  const enriched = PORTFOLIO.map(p => {
+    const pd = prices[p.yhTicker] || { price: p.cachedPrice, chgPct: p.cachedChg };
+    const fxRate       = fx[p.ccy] || 1;
+    const costDKK      = p.shares * p.avgCost * fxRate;
+    const valueDKK     = p.shares * pd.price * fxRate;
+    const glDKK        = valueDKK - costDKK;
+    const glPct        = costDKK > 0 ? glDKK / costDKK : 0;
+    // today's change: exact calc via prev price
+    const prevPrice    = pd.chgPct !== -1 ? pd.price / (1 + pd.chgPct) : pd.price;
+    const todayDKK     = p.shares * (pd.price - prevPrice) * fxRate;
+    return { ...p, price: pd.price, chgPct: pd.chgPct, fxRate, costDKK, valueDKK, glDKK, glPct, todayDKK };
+  });
+
+  const totalValue  = enriched.reduce((s,p) => s + p.valueDKK, 0);
+  const totalCost   = enriched.reduce((s,p) => s + p.costDKK, 0);
+  const totalGL     = totalValue - totalCost;
+  const totalGLPct  = totalCost > 0 ? totalGL / totalCost : 0;
+  const todayTotal  = enriched.reduce((s,p) => s + p.todayDKK, 0);
+  const prevTotal   = totalValue - todayTotal;
+  const todayPct    = prevTotal > 0 ? todayTotal / prevTotal : 0;
+
+  const withWeight = enriched.map(p => ({ ...p, weight: totalValue > 0 ? p.valueDKK / totalValue : 0 }));
+
+  const sorted = [...withWeight].sort((a,b) => {
+    if (sortBy === 'value') return b.valueDKK - a.valueDKK;
+    if (sortBy === 'today') return b.chgPct - a.chgPct;
+    if (sortBy === 'gl')    return b.glPct - a.glPct;
+    return 0;
+  });
+
+  const SortBtn = ({ col, label }) => (
+    <th
+      className={`px-3 py-2 text-right cursor-pointer select-none text-xs ${sortBy===col ? 'text-gray-700 font-semibold' : 'text-gray-400 font-normal'}`}
+      onClick={() => setSortBy(col)}
+    >
+      {label}{sortBy===col ? ' ↓' : ''}
+    </th>
+  );
+
+  const priceStr = (p) => {
+    const v = p.price;
+    if (v == null) return '–';
+    if (v >= 1000) return v.toLocaleString('da-DK', {maximumFractionDigits:0});
+    if (v >= 10)   return v.toLocaleString('da-DK', {minimumFractionDigits:2, maximumFractionDigits:2});
+    return v.toLocaleString('da-DK', {minimumFractionDigits:2, maximumFractionDigits:2});
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-10">
+
+      {/* ── Header ── */}
+      <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-[15px]">Portfolio</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isLive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-700 text-gray-400'}`}>
+            {isLive ? '● live' : '○ cached'}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => fetchPrices()}
+            className="text-xs bg-gray-700 hover:bg-gray-600 active:bg-gray-500 transition-colors px-3 py-1.5 rounded-full"
+          >
+            {refreshing ? <span className="inline-block spin">↻</span> : '↻'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Price timestamp bar ── */}
+      {lastUpdated && (
+        <div className={`px-4 py-1.5 flex items-center justify-between text-[11px] border-b ${isLive ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+          <span>
+            {isLive ? '● Prices as of' : '⚠ Cached prices from'}{' '}
+            <span className="font-semibold mono">
+              {lastUpdated.toLocaleTimeString('da-DK', {hour:'2-digit', minute:'2-digit', second:'2-digit'})}
+            </span>
+            {' '}
+            <span className="opacity-70">
+              {lastUpdated.toLocaleDateString('da-DK', {day:'2-digit', month:'2-digit', year:'numeric'})}
+            </span>
+          </span>
+          {!isLive && <span className="font-medium">Live data unavailable</span>}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center h-64 gap-2 text-gray-400">
+          <span className="text-2xl spin">↻</span>
+          <span className="text-sm">Fetching prices…</span>
+        </div>
+      ) : (
+        <>
+          {/* ── Summary row ── */}
+          <div className="grid grid-cols-3 bg-white border-b border-gray-100">
+            <div className="px-4 py-3 border-r border-gray-100">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Portfolio</div>
+              <div className="font-bold text-gray-900 mono text-base leading-tight">
+                {n(totalValue, 0)}<span className="text-xs font-normal text-gray-400"> DKK</span>
+              </div>
+            </div>
+            <div className="px-4 py-3 border-r border-gray-100">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Today</div>
+              <div className={`font-bold mono text-base leading-tight ${clr(todayTotal)}`}>{pct(todayPct)}</div>
+              <div className={`text-[11px] mono ${clr(todayTotal)}`}>{signed(todayTotal,0)} DKK</div>
+            </div>
+            <div className="px-4 py-3">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Total G/L</div>
+              <div className={`font-bold mono text-base leading-tight ${clr(totalGL)}`}>{pct(totalGLPct)}</div>
+              <div className={`text-[11px] mono ${clr(totalGL)}`}>{signed(totalGL,0)} DKK</div>
+            </div>
+          </div>
+
+          {/* ── Table ── */}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100 border-b border-gray-200">
+                  <th className="px-4 py-2 text-left text-xs text-gray-400 font-normal">Stock</th>
+                  <SortBtn col="value" label="Value" />
+                  <SortBtn col="today" label="Today" />
+                  <SortBtn col="gl"    label="G/L" />
+                  <th className="px-3 py-2 text-right text-xs text-gray-400 font-normal">Wt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((p, i) => (
+                  <tr key={p.ticker} className={`border-b border-gray-100 ${i%2===0 ? 'bg-white' : 'bg-gray-50/60'}`}>
+                    <td className="px-4 py-2.5 min-w-[110px]">
+                      <div className="font-semibold text-gray-900 text-[13px]">{p.ticker}</div>
+                      <div className="text-[11px] text-gray-400 truncate max-w-[110px]">{p.company}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="font-medium text-gray-800 mono text-[13px]">{n(p.valueDKK,0)}</div>
+                      <div className="text-[11px] text-gray-400 mono">{priceStr(p)} <span className="text-[10px]">{p.ccy}</span></div>
+                    </td>
+                    <td className={`px-3 py-2.5 text-right mono ${clr(p.chgPct)}`}>
+                      <div className="text-[13px] font-semibold">{pct(p.chgPct)}</div>
+                      <div className="text-[11px] opacity-80">{signed(p.todayDKK,0)}</div>
+                    </td>
+                    <td className={`px-3 py-2.5 text-right mono ${clr(p.glPct)}`}>
+                      <div className="text-[13px] font-semibold">{pct(p.glPct)}</div>
+                      <div className="text-[11px] opacity-80">{signed(p.glDKK,0)}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-[11px] text-gray-400 mono">
+                      {n(p.weight*100,1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ── Footer: FX rates ── */}
+          <div className="px-4 py-3 text-[11px] text-gray-400 text-center border-t border-gray-100 bg-white mt-0">
+            FX → DKK: &nbsp;
+            USD {fx.USD.toFixed(4)} &nbsp;·&nbsp;
+            EUR {fx.EUR.toFixed(4)} &nbsp;·&nbsp;
+            CAD {fx.CAD.toFixed(4)}
+            {!isLive && <span className="ml-2 text-amber-500">cached</span>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
