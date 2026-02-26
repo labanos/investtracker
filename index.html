@@ -76,6 +76,7 @@ function App() {
   const [isLive, setIsLive]       = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [sortBy, setSortBy]       = useState('value');
+  const [sortDir, setSortDir]     = useState('desc');
   const [notice, setNotice]       = useState(null);
 
   const fetchPrices = useCallback(async (silent=false) => {
@@ -169,18 +170,28 @@ function App() {
   const withWeight = enriched.map(p => ({ ...p, weight: totalValue > 0 ? p.valueDKK / totalValue : 0 }));
 
   const sorted = [...withWeight].sort((a,b) => {
-    if (sortBy === 'value') return b.valueDKK - a.valueDKK;
-    if (sortBy === 'today') return b.chgPct - a.chgPct;
-    if (sortBy === 'gl')    return b.glPct - a.glPct;
-    return 0;
+    let diff = 0;
+    if (sortBy === 'value') diff = b.valueDKK - a.valueDKK;
+    if (sortBy === 'today') diff = b.chgPct - a.chgPct;
+    if (sortBy === 'gl')    diff = b.glPct - a.glPct;
+    return sortDir === 'asc' ? -diff : diff;
   });
+
+  const handleSort = (col) => {
+    if (col === sortBy) {
+      setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortBy(col);
+      setSortDir('desc');
+    }
+  };
 
   const SortBtn = ({ col, label }) => (
     <th
       className={`px-3 py-2 text-right cursor-pointer select-none text-xs ${sortBy===col ? 'text-gray-700 font-semibold' : 'text-gray-400 font-normal'}`}
-      onClick={() => setSortBy(col)}
+      onClick={() => handleSort(col)}
     >
-      {label}{sortBy===col ? ' ↓' : ''}
+      {label}{sortBy===col ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
     </th>
   );
 
