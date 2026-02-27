@@ -3,10 +3,17 @@
 const StockChart = ({ yhTicker, ccy }) => {
   const WORKER = 'https://yf-proxy.labanos.workers.dev';
   const RANGES = [
-    { label: '1M', value: '1mo' },
-    { label: '3M', value: '3mo' },
-    { label: '6M', value: '6mo' },
-    { label: '1Y', value: '1y' },
+    { label: '1D',  value: '1d'  },
+    { label: '5D',  value: '5d'  },
+    { label: '1M',  value: '1mo' },
+    { label: '3M',  value: '3mo' },
+    { label: '6M',  value: '6mo' },
+    { label: 'YTD', value: 'ytd' },
+    { label: '1Y',  value: '1y'  },
+    { label: '2Y',  value: '2y'  },
+    { label: '5Y',  value: '5y'  },
+    { label: '10Y', value: '10y' },
+    { label: 'MAX', value: 'max' },
   ];
 
   const [range, setRange] = React.useState('3mo');
