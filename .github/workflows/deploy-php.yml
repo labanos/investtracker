@@ -6,6 +6,7 @@ on:
     paths:
       - 'php/notes.php'
       - 'php/transactions.php'
+      - 'php/portfolio.php'
 
 jobs:
   deploy:
@@ -16,10 +17,10 @@ jobs:
 
       - name: Inject DB credentials
         run: |
-          sed -i "s|%%DB_HOST%%|${{ secrets.DB_HOST }}|g" php/notes.php php/transactions.php
-          sed -i "s|%%DB_NAME%%|${{ secrets.DB_NAME }}|g" php/notes.php php/transactions.php
-          sed -i "s|%%DB_USER%%|${{ secrets.DB_USER }}|g" php/notes.php php/transactions.php
-          sed -i "s|%%DB_PASS%%|${{ secrets.DB_PASS }}|g" php/notes.php php/transactions.php
+          sed -i "s|%%DB_HOST%%|${{ secrets.DB_HOST }}|g" php/notes.php php/transactions.php php/portfolio.php
+          sed -i "s|%%DB_NAME%%|${{ secrets.DB_NAME }}|g" php/notes.php php/transactions.php php/portfolio.php
+          sed -i "s|%%DB_USER%%|${{ secrets.DB_USER }}|g" php/notes.php php/transactions.php php/portfolio.php
+          sed -i "s|%%DB_PASS%%|${{ secrets.DB_PASS }}|g" php/notes.php php/transactions.php php/portfolio.php
 
       - name: Install sshpass
         run: sudo apt-get install -y sshpass
@@ -33,7 +34,8 @@ jobs:
             "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" <<'SFTP'
           put php/notes.php notes.php
           put php/transactions.php transactions.php
+          put php/portfolio.php portfolio.php
           SFTP
 
       - name: Done
-        run: echo "✅ notes.php and transactions.php deployed to labanos.dk"
+        run: echo "✅ notes.php, transactions.php and portfolio.php deployed to labanos.dk"

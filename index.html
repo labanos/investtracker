@@ -26,9 +26,9 @@
 
 const { useState, useEffect, useCallback } = React;
 
-// ─── Portfolio data ────────────────────────────────────────────────────────
-// yhTicker = Yahoo Finance symbol | cachedPrice/cachedChangePct = fallback from last sync
-const PORTFOLIO = [
+// ─── Portfolio seed data (one-time migration to DB on first load) ─────────
+// yhTicker = Yahoo Finance symbol | cachedPrice/cachedChg = offline fallback
+const SEED_PORTFOLIO = [
   { ticker:'RGTI',     yhTicker:'RGTI',        company:'Rigetti Computing',       ccy:'USD', cachedPrice:18.82,   cachedChg:0.0675  },
   { ticker:'LULU',     yhTicker:'LULU',        company:'Lululemon Athletica',     ccy:'USD', cachedPrice:187.38,  cachedChg:0.0265  },
   { ticker:'NOVO-B',   yhTicker:'NOVO-B.CO',   company:'Novo Nordisk',            ccy:'DKK', cachedPrice:239.0,   cachedChg:0.0038  },
@@ -61,6 +61,21 @@ const PORTFOLIO = [
 // ─── APIs ──────────────────────────────────────────────────────────────────
 const NOTES_API        = 'https://labanos.dk/notes.php';
 const TRANSACTIONS_API = 'https://labanos.dk/transactions.php';
+const PORTFOLIO_API    = 'https://labanos.dk/portfolio.php';
+
+// ─── normalizePfRow — DB row → app format ─────────────────────────────────
+const normalizePfRow = (row) => {
+  const seed = SEED_PORTFOLIO.find(s => s.ticker === row.ticker) || {};
+  return {
+    id:           row.id ? Number(row.id) : undefined,
+    ticker:       row.ticker,
+    yhTicker:     row.yh_ticker || row.yhTicker || row.ticker,
+    company:      row.company,
+    ccy:          row.ccy,
+    cachedPrice:  seed.cachedPrice  || 0,
+    cachedChg:    seed.cachedChg    || 0,
+  };
+};
 
 // ─── Seed transactions (one-time migration to DB on first load) ─────────────
 // Each entry: { date:'YYYY-MM-DD', type:'buy'|'sell', shares, price, fees, note }
@@ -335,6 +350,160 @@ function NoteForm({ form, onChange, onSave, onCancel, saving, error, textareaRef
         <button onClick={onSave} disabled={saving || !form.text.trim()}
           className="text-[12px] font-medium bg-gray-900 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 hover:bg-gray-700 transition-colors">
           {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── AddHoldingModal ───────────────────────────────────────────────────────
+function AddHoldingModal({ onClose, onAdded }) {
+  const today = new Date().toISOString().split('T')[0];
+  const [form, setForm] = useState({
+    ticker: '', yhTicker: '', company: '', ccy: 'USD',
+    date: today, type: 'buy', shares: '', price: '', fees: '0', note: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState(null);
+
+  const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  const handleSave = async () => {
+    const ticker = form.ticker.trim().toUpperCase();
+    if (!ticker || !form.company.trim() || !form.shares || !form.price) {
+      setError('Please fill in all required fields.'); return;
+    }
+    setSaving(true); setError(null);
+    try {
+      // 1. Create portfolio entry
+      const portRes = await fetch(PORTFOLIO_API, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker, company: form.company.trim(),
+          yhTicker: form.yhTicker.trim() || ticker, ccy: form.ccy,
+        }),
+      });
+      if (!portRes.ok) {
+        const err = await portRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Could not add holding');
+      }
+      const portEntry = await portRes.json();
+
+      // 2. Create opening transaction
+      const txnRes = await fetch(TRANSACTIONS_API, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker, date: form.date, type: form.type,
+          shares: parseFloat(form.shares), price: parseFloat(form.price),
+          fees: parseFloat(form.fees) || 0, note: form.note.trim(),
+        }),
+      });
+      if (!txnRes.ok) throw new Error('Could not add opening transaction');
+      const txn = await txnRes.json();
+
+      onAdded(normalizePfRow(portEntry), txn);
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Something went wrong.');
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl px-4 pt-4 pb-8 max-h-[90vh] overflow-y-auto">
+
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-[15px] font-bold text-gray-900">Add New Holding</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none px-1">✕</button>
+        </div>
+
+        {/* Ticker + Currency */}
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div>
+            <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Ticker *</label>
+            <input type="text" value={form.ticker}
+              onChange={e => set('ticker', e.target.value.toUpperCase())}
+              placeholder="e.g. AAPL"
+              className="w-full text-[13px] font-semibold border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 uppercase" />
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Currency *</label>
+            <select value={form.ccy} onChange={e => set('ccy', e.target.value)}
+              className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 bg-white">
+              {['USD','DKK','EUR','CAD','GBP','SEK','NOK'].map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Company */}
+        <div className="mb-3">
+          <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Company Name *</label>
+          <input type="text" value={form.company} onChange={e => set('company', e.target.value)}
+            placeholder="e.g. Apple Inc."
+            className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300" />
+        </div>
+
+        {/* Yahoo Finance ticker */}
+        <div className="mb-4">
+          <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Yahoo Finance Ticker</label>
+          <input type="text" value={form.yhTicker} onChange={e => set('yhTicker', e.target.value)}
+            placeholder={form.ticker || 'Leave blank if same as ticker'}
+            className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 mono" />
+          <p className="text-[10px] text-gray-400 mt-1">e.g. NOVO-B.CO for Danish, CSU.TO for TSX, CHG.DE for Xetra</p>
+        </div>
+
+        {/* Opening transaction */}
+        <div className="border-t border-gray-100 pt-4 mb-3">
+          <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Opening Transaction</div>
+
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div>
+              <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Date *</label>
+              <input type="date" value={form.date} onChange={e => set('date', e.target.value)}
+                className="w-full text-[12px] border border-gray-200 rounded-lg px-2 py-2 outline-none focus:border-blue-300" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Type</label>
+              <div className="flex gap-1">
+                {['buy','sell'].map(t => (
+                  <button key={t} onClick={() => set('type', t)}
+                    className={`flex-1 text-[11px] font-semibold py-2 rounded-lg border transition-colors ${
+                      form.type === t
+                        ? t === 'buy' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-red-500 text-white border-red-500'
+                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                    }`}>{t.toUpperCase()}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            {[['Shares *','shares','1'],['Price *','price','0.0001'],['Fees','fees','0.01']].map(([label,key,step]) => (
+              <div key={key}>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">{label}</label>
+                <input type="number" step={step} value={form[key]}
+                  onChange={e => set(key, e.target.value)}
+                  placeholder={key === 'fees' ? '0' : ''}
+                  className="w-full text-[12px] border border-gray-200 rounded-lg px-2 py-2 outline-none focus:border-blue-300 mono" />
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Note (optional)</label>
+            <input type="text" value={form.note} onChange={e => set('note', e.target.value)}
+              placeholder="Optional note…"
+              className="w-full text-[12px] border border-gray-200 rounded-lg px-2 py-2 outline-none focus:border-blue-300" />
+          </div>
+        </div>
+
+        {error && <div className="text-[12px] text-red-500 mb-3 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
+
+        <button onClick={handleSave} disabled={saving}
+          className="w-full py-3 bg-gray-900 text-white font-semibold rounded-xl text-[14px] hover:bg-gray-700 disabled:opacity-40 transition-colors">
+          {saving ? 'Adding…' : 'Add Holding'}
         </button>
       </div>
     </div>
@@ -699,16 +868,59 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, isLive, l
 
 // ─── App ───────────────────────────────────────────────────────────────────
 function App() {
-  const [prices, setPrices]       = useState({});
-  const [fx, setFx]               = useState(CACHED_FX);
-  const [loading, setLoading]     = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [isLive, setIsLive]       = useState(false);
+  const [prices, setPrices]           = useState({});
+  const [fx, setFx]                   = useState(CACHED_FX);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [isLive, setIsLive]           = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [sortBy, setSortBy]       = useState('value');
-  const [sortDir, setSortDir]     = useState('desc');
-  const [notice, setNotice]       = useState(null);
+  const [sortBy, setSortBy]           = useState('value');
+  const [sortDir, setSortDir]         = useState('desc');
+  const [notice, setNotice]           = useState(null);
   const [selectedTicker, setSelectedTicker] = useState(null);
+  const [showClosed,  setShowClosed]  = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  // ── Portfolio from DB ─────────────────────────────────────────────────
+  const portfolioRef = React.useRef(SEED_PORTFOLIO); // used inside fetchPrices
+  const [portfolio,       setPortfolio]       = useState([]);
+  const [portfolioLoaded, setPortfolioLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch(PORTFOLIO_API)
+      .then(r => r.ok ? r.json() : [])
+      .then(async rows => {
+        if (rows.length === 0) {
+          // First ever load — seed from SEED_PORTFOLIO
+          const res = await fetch(`${PORTFOLIO_API}?batch=1`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(SEED_PORTFOLIO),
+          });
+          if (res.ok) {
+            const seeded = await res.json();
+            const pf = seeded.map(normalizePfRow);
+            portfolioRef.current = pf;
+            setPortfolio(pf);
+          } else {
+            portfolioRef.current = SEED_PORTFOLIO;
+            setPortfolio(SEED_PORTFOLIO);
+          }
+        } else {
+          const pf = rows.map(normalizePfRow);
+          portfolioRef.current = pf;
+          setPortfolio(pf);
+        }
+        setPortfolioLoaded(true);
+      })
+      .catch(() => {
+        portfolioRef.current = SEED_PORTFOLIO;
+        setPortfolio(SEED_PORTFOLIO);
+        setPortfolioLoaded(true);
+      });
+  }, []);
+
+  // Keep ref in sync whenever portfolio state changes
+  useEffect(() => { if (portfolio.length > 0) portfolioRef.current = portfolio; }, [portfolio]);
 
   // ── Transactions from DB ──────────────────────────────────────────────
   // allTxns: { [ticker]: [{id, date, type, shares, price, fees, note}, ...] }
@@ -735,7 +947,6 @@ function App() {
               body: JSON.stringify(flat),
             });
             if (res.ok) {
-              // Re-fetch now that DB is seeded
               const seeded = await fetch(TRANSACTIONS_API).then(r => r.json());
               seeded.forEach(t => { (grouped[t.ticker] = grouped[t.ticker] || []).push(t); });
             }
@@ -745,7 +956,6 @@ function App() {
         setTxnsLoaded(true);
       })
       .catch(() => {
-        // Fall back to seed data if API unreachable
         const grouped = {};
         Object.entries(SEED_TRANSACTIONS).forEach(([ticker, txns]) => {
           grouped[ticker] = txns.map((t, i) => ({ ...t, ticker, id: -(i+1) }));
@@ -760,11 +970,26 @@ function App() {
     setAllTxns(prev => ({ ...prev, [ticker]: updatedTxns }));
   }, []);
 
+  // Called when a new holding is added via AddHoldingModal
+  const handlePortfolioChanged = useCallback((newPfItem, firstTxn) => {
+    setPortfolio(prev => {
+      const next = [...prev, newPfItem];
+      portfolioRef.current = next;
+      return next;
+    });
+    if (firstTxn) {
+      setAllTxns(prev => ({ ...prev, [newPfItem.ticker]: [firstTxn] }));
+    }
+    // Re-fetch prices so the new ticker appears live
+    setTimeout(() => fetchPrices(true), 200);
+  }, []);
+
   const fetchPrices = useCallback(async (silent=false) => {
+    const pf = portfolioRef.current;
     if (!silent) setLoading(true);
     setRefreshing(true);
 
-    const stockSyms = PORTFOLIO.map(p => p.yhTicker);
+    const stockSyms = pf.map(p => p.yhTicker);
     const fxSyms    = ['USDDKK=X','EURDKK=X','CADDKK=X'];
     const symbols   = [...stockSyms, ...fxSyms].join(',');
     const workerUrl = `https://yf-proxy.labanos.workers.dev/?symbols=${symbols}`;
@@ -811,7 +1036,7 @@ function App() {
       setLastUpdated(CACHED_AS_OF);         // time the cached prices were recorded
       if (Object.keys(prices).length === 0) {
         const cached = {};
-        PORTFOLIO.forEach(p => { cached[p.yhTicker] = { price: p.cachedPrice, chgPct: p.cachedChg }; });
+        pf.forEach(p => { cached[p.yhTicker] = { price: p.cachedPrice || 0, chgPct: p.cachedChg || 0 }; });
         setPrices(cached);
         setFx(CACHED_FX);
       }
@@ -820,14 +1045,16 @@ function App() {
     setRefreshing(false);
   }, []);
 
+  // Trigger price fetch once portfolio is loaded, then poll every 5 min
   useEffect(() => {
+    if (!portfolioLoaded) return;
     fetchPrices();
     const iv = setInterval(() => fetchPrices(true), 5 * 60 * 1000);
     return () => clearInterval(iv);
-  }, []);
+  }, [portfolioLoaded]);
 
   // Enrich each position — shares/avgCost derived from DB transactions
-  const enriched = PORTFOLIO.map(p => {
+  const enriched = portfolio.map(p => {
     const { shares, avgCost } = computePosition(allTxns[p.ticker] || []);
     const pd       = prices[p.yhTicker] || { price: p.cachedPrice, chgPct: p.cachedChg };
     const fxRate   = fx[p.ccy] || 1;
@@ -850,7 +1077,11 @@ function App() {
 
   const withWeight = enriched.map(p => ({ ...p, weight: totalValue > 0 ? p.valueDKK / totalValue : 0 }));
 
-  // ── Detail page navigation ──
+  // ── Split active vs closed positions ──
+  const activePositions = withWeight.filter(p => p.shares > 0);
+  const closedPositions = withWeight.filter(p => p.shares === 0);
+
+  // ── Detail page navigation (works for both active and closed positions) ──
   if (selectedTicker) {
     const pos = withWeight.find(p => p.ticker === selectedTicker);
     if (pos) return (
@@ -865,13 +1096,15 @@ function App() {
     );
   }
 
-  const sorted = [...withWeight].sort((a,b) => {
+  const sortFn = (a, b) => {
     let diff = 0;
     if (sortBy === 'value') diff = b.valueDKK - a.valueDKK;
     if (sortBy === 'today') diff = b.chgPct - a.chgPct;
     if (sortBy === 'gl')    diff = b.glPct - a.glPct;
     return sortDir === 'asc' ? -diff : diff;
-  });
+  };
+  const sortedActive = [...activePositions].sort(sortFn);
+  const sortedClosed = [...closedPositions].sort(sortFn);
 
   const handleSort = (col) => {
     if (col === sortBy) {
@@ -910,7 +1143,14 @@ function App() {
             {isLive ? '● live' : '○ cached'}
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            title="Add new holding"
+            className="text-xs bg-blue-600 hover:bg-blue-500 active:bg-blue-700 transition-colors px-3 py-1.5 rounded-full font-semibold"
+          >
+            + New
+          </button>
           <button
             onClick={() => fetchPrices()}
             className="text-xs bg-gray-700 hover:bg-gray-600 active:bg-gray-500 transition-colors px-3 py-1.5 rounded-full"
@@ -919,6 +1159,14 @@ function App() {
           </button>
         </div>
       </div>
+
+      {/* ── Add Holding Modal ── */}
+      {showAddModal && (
+        <AddHoldingModal
+          onClose={() => setShowAddModal(false)}
+          onAdded={handlePortfolioChanged}
+        />
+      )}
 
       {/* ── Price timestamp bar ── */}
       {lastUpdated && (
@@ -977,7 +1225,8 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((p, i) => (
+                {/* Active positions */}
+                {sortedActive.map((p, i) => (
                   <tr key={p.ticker} onClick={() => setSelectedTicker(p.ticker)} className={`border-b border-gray-100 cursor-pointer transition-colors ${i%2===0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50/60 hover:bg-blue-50'}`}>
                     <td className="px-4 py-2.5 min-w-[110px]">
                       <div className="font-semibold text-gray-900 text-[13px]">{p.ticker}</div>
@@ -998,6 +1247,44 @@ function App() {
                     <td className="px-3 py-2.5 text-right text-[11px] text-gray-400 mono">
                       {n(p.weight*100,1)}%
                     </td>
+                  </tr>
+                ))}
+
+                {/* Closed positions toggle row */}
+                {closedPositions.length > 0 && (
+                  <tr className="border-t border-gray-200 bg-gray-50/50">
+                    <td colSpan={5}>
+                      <button
+                        onClick={() => setShowClosed(s => !s)}
+                        className="w-full px-4 py-2.5 text-left text-[12px] text-gray-400 hover:text-gray-600 flex items-center gap-1.5"
+                      >
+                        <span className="text-[10px]">{showClosed ? '▾' : '▸'}</span>
+                        {showClosed ? 'Hide' : 'Show'} {closedPositions.length} closed position{closedPositions.length !== 1 ? 's' : ''}
+                      </button>
+                    </td>
+                  </tr>
+                )}
+
+                {/* Closed positions rows */}
+                {showClosed && sortedClosed.map((p) => (
+                  <tr key={p.ticker} onClick={() => setSelectedTicker(p.ticker)}
+                    className="border-b border-gray-50 cursor-pointer bg-gray-50/30 hover:bg-blue-50 opacity-50">
+                    <td className="px-4 py-2.5 min-w-[110px]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-gray-500 text-[13px]">{p.ticker}</span>
+                        <span className="text-[9px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded uppercase tracking-wide">closed</span>
+                      </div>
+                      <div className="text-[11px] text-gray-400 truncate max-w-[110px]">{p.company}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="text-[11px] text-gray-400 italic">—</div>
+                      <div className="text-[11px] text-gray-300 mono">{priceStr(p)} <span className="text-[10px]">{p.ccy}</span></div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right mono text-gray-300">
+                      <div className="text-[13px]">{pct(p.chgPct)}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right mono text-gray-300 text-[13px]">—</td>
+                    <td className="px-3 py-2.5 text-right text-[11px] text-gray-300 mono">—</td>
                   </tr>
                 ))}
               </tbody>
