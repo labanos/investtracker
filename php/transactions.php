@@ -168,10 +168,18 @@ switch ($method) {
         break;
 
     // ── DELETE /transactions.php?id=5
+    // ── DELETE /transactions.php?ticker=X  → delete ALL transactions for a ticker
     case 'DELETE':
-        if (!$id) { http_response_code(400); echo json_encode(['error'=>'id required']); exit; }
-        $pdo->prepare("DELETE FROM transactions WHERE id=?")->execute([$id]);
-        echo json_encode(['success' => true]);
+        if ($ticker) {
+            $stmt = $pdo->prepare("DELETE FROM transactions WHERE ticker=?");
+            $stmt->execute([$ticker]);
+            echo json_encode(['deleted' => $stmt->rowCount()]);
+        } elseif ($id) {
+            $pdo->prepare("DELETE FROM transactions WHERE id=?")->execute([$id]);
+            echo json_encode(['success' => true]);
+        } else {
+            http_response_code(400); echo json_encode(['error'=>'id or ticker required']); exit;
+        }
         break;
 
     default:

@@ -511,7 +511,7 @@ function AddHoldingModal({ onClose, onAdded }) {
 }
 
 // ─── Detail Page ───────────────────────────────────────────────────────────
-function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, isLive, lastUpdated }) {
+function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveHolding, isLive, lastUpdated }) {
 
   // ── Transactions state ──────────────────────────────────────────────────
   const [txns,         setTxns]        = useState(initialTxns || []);
@@ -520,6 +520,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, isLive, l
   const [txnForm,      setTxnForm]     = useState({ date:'', type:'buy', shares:'', price:'', fees:'0', note:'' });
   const [savingTxn,    setSavingTxn]   = useState(false);
   const [txnError,     setTxnError]    = useState(null);
+  const [removing,     setRemoving]    = useState(false);
 
   const todayStrT = () => new Date().toISOString().split('T')[0];
   const sortTxns  = arr => [...arr].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
@@ -654,6 +655,27 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, isLive, l
       setNotes(prev => prev.filter(n => n.id !== id));
     } catch (_) {
       setNoteError('Could not delete — check your connection.');
+    }
+  };
+
+  const removeHolding = async () => {
+    const txnCount = txns.length;
+    const msg = txnCount > 0
+      ? `Remove ${p.ticker} from your portfolio?\n\nThis will also permanently delete ${txnCount} transaction${txnCount !== 1 ? 's' : ''} for this holding. This cannot be undone.`
+      : `Remove ${p.ticker} from your portfolio? This cannot be undone.`;
+    if (!window.confirm(msg)) return;
+    setRemoving(true);
+    try {
+      if (txnCount > 0) {
+        await fetch(`${TRANSACTIONS_API}?ticker=${encodeURIComponent(p.ticker)}&_method=DELETE`, { method: 'POST' });
+      }
+      if (p.id) {
+        await fetch(`${PORTFOLIO_API}?id=${p.id}&_method=DELETE`, { method: 'POST' });
+      }
+      onRemoveHolding(p.ticker);
+    } catch (_) {
+      setRemoving(false);
+      alert('Could not remove holding — check your connection.');
     }
   };
 
@@ -862,6 +884,17 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, isLive, l
         )}
       </div>
 
+      {/* ── Remove holding ── */}
+      <div className="px-4 pt-6 pb-2">
+        <button
+          onClick={removeHolding}
+          disabled={removing}
+          className="text-[12px] text-red-400 hover:text-red-600 transition-colors disabled:opacity-40"
+        >
+          {removing ? 'Removing…' : '✕ Remove this holding'}
+        </button>
+      </div>
+
     </div>
   );
 }
@@ -968,6 +1001,21 @@ function App() {
   // Called by DetailPage when it adds/edits/deletes a transaction
   const handleTxnsChanged = useCallback((ticker, updatedTxns) => {
     setAllTxns(prev => ({ ...prev, [ticker]: updatedTxns }));
+  }, []);
+
+  // Called when a holding is removed from DetailPage
+  const handleRemoveHolding = useCallback((ticker) => {
+    setPortfolio(prev => {
+      const next = prev.filter(p => p.ticker !== ticker);
+      portfolioRef.current = next;
+      return next;
+    });
+    setAllTxns(prev => {
+      const next = { ...prev };
+      delete next[ticker];
+      return next;
+    });
+    setSelectedTicker(null);
   }, []);
 
   // Called when a new holding is added via AddHoldingModal
@@ -1090,6 +1138,7 @@ function App() {
         initialTxns={(allTxns[selectedTicker] || []).slice().sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id)}
         onBack={() => setSelectedTicker(null)}
         onTxnsChanged={handleTxnsChanged}
+        onRemoveHolding={handleRemoveHolding}
         isLive={isLive}
         lastUpdated={lastUpdated}
       />
