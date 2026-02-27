@@ -223,37 +223,8 @@ const TRANSACTIONS = {
   ],
 };
 
-// ─── Notes & Diary ─────────────────────────────────────────────────────────
-// Each entry: { date:'YYYY-MM-DD', text }
-const NOTES = {
-  'RGTI':      [],
-  'LULU':      [],
-  'NOVO-B':    [],
-  'ROCK-B':    [],
-  'JYSK':      [],
-  'NFLX':      [],
-  'CSU':       [],
-  'CHG':       [],
-  'AAPL':      [],
-  'GMAB':      [],
-  'DANSKE':    [],
-  'ASML':      [],
-  'NVDA':      [],
-  'IONQ':      [],
-  'MSFT':      [],
-  'V':         [],
-  'NU':        [],
-  'BKNG':      [],
-  'MLI':       [],
-  'GOOGL':     [],
-  'SNPS':      [],
-  'TSM':       [],
-  'ADBE':      [],
-  'QUBT':      [],
-  'MAERSK-B':  [],
-  'NET':       [],
-  'QBTS':      [],
-};
+// ─── Notes API ─────────────────────────────────────────────────────────────
+const NOTES_API = 'https://labanos.dk/notes.php';
 
 const CACHED_FX = { USD: 6.32546, EUR: 7.471825, CAD: 4.6206, DKK: 1.0 };
 // ↑ Update CACHED_AS_OF whenever you refresh the cached prices/FX above
@@ -265,10 +236,119 @@ const pct = (v) => v==null||isNaN(v) ? '–' : (v>=0?'+':'−') + n(Math.abs(v*1
 const signed = (v, d=0) => v==null||isNaN(v) ? '–' : (v>=0?'+':'−') + n(Math.abs(v),d);
 const clr = (v) => !v && v!==0 ? 'text-gray-400' : v > 0 ? 'text-emerald-500' : v < 0 ? 'text-red-500' : 'text-gray-400';
 
+// ─── NoteForm ──────────────────────────────────────────────────────────────
+function NoteForm({ form, onChange, onSave, onCancel, saving, error, textareaRef }) {
+  return (
+    <div className="bg-white rounded-xl border border-blue-100 shadow-sm px-4 py-3 mb-2">
+      <input
+        type="date"
+        value={form.date}
+        onChange={e => onChange(f => ({ ...f, date: e.target.value }))}
+        className="text-[11px] text-gray-500 mono border border-gray-200 rounded-md px-2 py-1 mb-2 outline-none focus:border-blue-300"
+      />
+      <textarea
+        ref={textareaRef}
+        value={form.text}
+        onChange={e => onChange(f => ({ ...f, text: e.target.value }))}
+        placeholder="Write your note…"
+        rows={3}
+        className="w-full text-[13px] text-gray-700 leading-relaxed border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 resize-none"
+        onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') onSave(); }}
+      />
+      {error && <div className="text-[11px] text-red-500 mt-1">{error}</div>}
+      <div className="flex gap-2 mt-2 justify-end">
+        <button onClick={onCancel}
+          className="text-[12px] text-gray-400 hover:text-gray-600 px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors">
+          Cancel
+        </button>
+        <button onClick={onSave} disabled={saving || !form.text.trim()}
+          className="text-[12px] font-medium bg-gray-900 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 hover:bg-gray-700 transition-colors">
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Detail Page ───────────────────────────────────────────────────────────
 function DetailPage({ position: p, onBack, isLive, lastUpdated }) {
-  const txns  = (TRANSACTIONS[p.ticker] || []).slice().sort((a,b) => b.date.localeCompare(a.date));
-  const notes = (NOTES[p.ticker] || []).slice().sort((a,b) => b.date.localeCompare(a.date));
+  const txns = (TRANSACTIONS[p.ticker] || []).slice().sort((a,b) => b.date.localeCompare(a.date));
+
+  // ── Notes state ────────────────────────────────────────────────────────
+  const [notes,      setNotes]      = useState([]);
+  const [notesReady, setNotesReady] = useState(false);
+  const [addingNote, setAddingNote] = useState(false);
+  const [editingId,  setEditingId]  = useState(null);
+  const [noteForm,   setNoteForm]   = useState({ date: '', text: '' });
+  const [saving,     setSaving]     = useState(false);
+  const [noteError,  setNoteError]  = useState(null);
+  const textareaRef = React.useRef(null);
+
+  useEffect(() => {
+    setNotesReady(false);
+    fetch(`${NOTES_API}?ticker=${encodeURIComponent(p.ticker)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { setNotes(Array.isArray(data) ? data : []); setNotesReady(true); })
+      .catch(()  => { setNotes([]); setNotesReady(true); });
+  }, [p.ticker]);
+
+  const todayStr = () => new Date().toISOString().split('T')[0];
+  const sortNotes = arr => [...arr].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+
+  const openAdd = () => {
+    setAddingNote(true); setEditingId(null);
+    setNoteForm({ date: todayStr(), text: '' }); setNoteError(null);
+    setTimeout(() => textareaRef.current?.focus(), 60);
+  };
+  const openEdit = (note) => {
+    setEditingId(note.id); setAddingNote(false);
+    setNoteForm({ date: note.date, text: note.text }); setNoteError(null);
+  };
+  const cancelNote = () => {
+    setAddingNote(false); setEditingId(null);
+    setNoteForm({ date: '', text: '' }); setNoteError(null);
+  };
+
+  const saveNote = async () => {
+    if (!noteForm.text.trim()) return;
+    setSaving(true); setNoteError(null);
+    try {
+      if (addingNote) {
+        const res = await fetch(NOTES_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker: p.ticker, date: noteForm.date, text: noteForm.text.trim() }),
+        });
+        if (!res.ok) throw new Error();
+        const created = await res.json();
+        setNotes(prev => sortNotes([...prev, created]));
+      } else {
+        const res = await fetch(`${NOTES_API}?id=${editingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: noteForm.date, text: noteForm.text.trim() }),
+        });
+        if (!res.ok) throw new Error();
+        setNotes(prev => sortNotes(prev.map(n =>
+          n.id === editingId ? { ...n, date: noteForm.date, text: noteForm.text.trim() } : n
+        )));
+      }
+      cancelNote();
+    } catch (_) {
+      setNoteError('Could not save — check your connection and try again.');
+    }
+    setSaving(false);
+  };
+
+  const deleteNote = async (id) => {
+    if (!window.confirm('Delete this note?')) return;
+    try {
+      await fetch(`${NOTES_API}?id=${id}`, { method: 'DELETE' });
+      setNotes(prev => prev.filter(n => n.id !== id));
+    } catch (_) {
+      setNoteError('Could not delete — check your connection.');
+    }
+  };
 
   const totalBought = txns.filter(t=>t.type==='buy').reduce((s,t)=>s+(t.shares*t.price+t.fees),0);
   const totalSold   = txns.filter(t=>t.type==='sell').reduce((s,t)=>s+(t.shares*t.price-t.fees),0);
@@ -375,19 +455,67 @@ function DetailPage({ position: p, onBack, isLive, lastUpdated }) {
 
       {/* ── Notes & Diary ── */}
       <div className="mx-4">
-        <h2 className="text-[13px] font-semibold text-gray-600 uppercase tracking-wide mb-2">Notes & Diary</h2>
-        {notes.length === 0 ? (
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-[13px] font-semibold text-gray-600 uppercase tracking-wide">Notes & Diary</h2>
+          {!addingNote && (
+            <button onClick={openAdd}
+              className="text-[12px] text-blue-500 hover:text-blue-600 font-medium px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors">
+              + Add note
+            </button>
+          )}
+        </div>
+
+        {/* Add form */}
+        {addingNote && (
+          <NoteForm
+            form={noteForm}
+            onChange={setNoteForm}
+            onSave={saveNote}
+            onCancel={cancelNote}
+            saving={saving}
+            error={noteError}
+            textareaRef={textareaRef}
+          />
+        )}
+
+        {/* Notes list */}
+        {!notesReady ? (
+          <div className="text-center text-gray-400 text-sm py-6">Loading notes…</div>
+        ) : notes.length === 0 && !addingNote ? (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-6 text-center text-gray-400 text-sm">
-            No notes yet — add them to the <code className="bg-gray-100 px-1 rounded">NOTES</code> object in the source file.
+            No notes yet —{' '}
+            <button onClick={openAdd} className="text-blue-400 font-medium hover:underline">
+              add one
+            </button>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {notes.map((note, i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-                <div className="text-[11px] text-gray-400 mono mb-1">{fmtDate(note.date)}</div>
-                <p className="text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap">{note.text}</p>
-              </div>
-            ))}
+            {notes.map((note) =>
+              editingId === note.id ? (
+                <NoteForm
+                  key={note.id}
+                  form={noteForm}
+                  onChange={setNoteForm}
+                  onSave={saveNote}
+                  onCancel={cancelNote}
+                  saving={saving}
+                  error={noteError}
+                />
+              ) : (
+                <div key={note.id} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-[11px] text-gray-400 mono">{fmtDate(note.date)}</div>
+                    <div className="flex gap-1 shrink-0 -mt-0.5">
+                      <button onClick={() => openEdit(note)} title="Edit"
+                        className="text-gray-300 hover:text-blue-400 transition-colors text-[14px] px-1 leading-none">✎</button>
+                      <button onClick={() => deleteNote(note.id)} title="Delete"
+                        className="text-gray-300 hover:text-red-400 transition-colors text-[14px] px-1 leading-none">✕</button>
+                    </div>
+                  </div>
+                  <p className="text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap mt-1">{note.text}</p>
+                </div>
+              )
+            )}
           </div>
         )}
       </div>
