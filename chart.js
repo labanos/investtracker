@@ -141,8 +141,8 @@ const StockChart = ({ yhTicker, ccy }) => {
           <rect x={tipX} y={tipY} width={tipW} height={tipH} rx="5"
             fill="white" stroke="#e2e8f0" strokeWidth="1"
             style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.10))' }} />
-          <text x={tipX + 10} y={tipY + 18} fontSize="17" fill="#64748b">{dateStr}</text>
-          <text x={tipX + 10} y={tipY + 40} fontSize="22" fontWeight="600" fill="#0f172a">
+          <text x={tipX + 10} y={tipY + 18} style={{ fontSize: 'clamp(10px, 1.3vw, 12px)' }} fill="#64748b">{dateStr}</text>
+          <text x={tipX + 10} y={tipY + 40} style={{ fontSize: 'clamp(12px, 1.6vw, 15px)' }} fontWeight="600" fill="#0f172a">
             {ccy} {hover.point.c.toFixed(2)}
           </text>
         </g>
@@ -183,7 +183,7 @@ const StockChart = ({ yhTicker, ccy }) => {
         {yLevels.map((v, i) => (
           <text key={i}
             x={PAD.l + chartW + 8} y={yScale(v) + 6}
-            fontSize="18" fill="#94a3b8" textAnchor="start">
+            style={{ fontSize: 'clamp(9px, 1.4vw, 12px)' }} fill="#94a3b8" textAnchor="start">
             {formatPrice(v)}
           </text>
         ))}
@@ -192,7 +192,7 @@ const StockChart = ({ yhTicker, ccy }) => {
         {xLabels.map((xl, i) => (
           <text key={i}
             x={xl.x} y={PAD.t + chartH + 22}
-            fontSize="17" fill="#94a3b8" textAnchor={xl.anchor}>
+            style={{ fontSize: 'clamp(9px, 1.3vw, 12px)' }} fill="#94a3b8" textAnchor={xl.anchor}>
             {xl.label}
           </text>
         ))}
