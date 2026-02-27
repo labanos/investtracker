@@ -1,0 +1,39 @@
+name: Deploy PHP to labanos.dk
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'php/notes.php'
+      - 'php/transactions.php'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inject DB credentials
+        run: |
+          sed -i "s|%%DB_HOST%%|${{ secrets.DB_HOST }}|g" php/notes.php php/transactions.php
+          sed -i "s|%%DB_NAME%%|${{ secrets.DB_NAME }}|g" php/notes.php php/transactions.php
+          sed -i "s|%%DB_USER%%|${{ secrets.DB_USER }}|g" php/notes.php php/transactions.php
+          sed -i "s|%%DB_PASS%%|${{ secrets.DB_PASS }}|g" php/notes.php php/transactions.php
+
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+
+      - name: Deploy via SFTP
+        run: |
+          sshpass -p "${{ secrets.SFTP_PASS }}" sftp \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -P ${{ secrets.SFTP_PORT }} \
+            "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" <<'SFTP'
+          put php/notes.php notes.php
+          put php/transactions.php transactions.php
+          SFTP
+
+      - name: Done
+        run: echo "✅ notes.php and transactions.php deployed to labanos.dk"
