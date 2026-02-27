@@ -11,6 +11,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script type="text/babel" src="chart.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; -webkit-tap-highlight-color: transparent; }
@@ -312,6 +313,11 @@ function DetailPage({ position: p, onBack, isLive, lastUpdated }) {
             <div className={`text-[11px] mono mt-0.5 ${color||'text-gray-400'}`}>{sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* ── Chart ── */}
+      <div className="mx-4 mb-2">
+        <StockChart yhTicker={p.yhTicker} ccy={p.ccy} />
       </div>
 
       {/* ── Transactions ── */}
