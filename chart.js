@@ -16,11 +16,12 @@ const StockChart = ({ yhTicker, ccy }) => {
     { label: 'MAX', value: 'max' },
   ];
 
-  const [range, setRange] = React.useState('3mo');
-  const [data, setData] = React.useState(null);   // { symbol, currency, points }
+  const [range, setRange]   = React.useState('3mo');
+  const [data,  setData]    = React.useState(null);
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(null);
-  const [hover, setHover] = React.useState(null); // { x, y, point }
+  const [error,  setError]  = React.useState(null);
+  const [hover,  setHover]  = React.useState(null);
+  const svgRef = React.useRef(null);
 
   React.useEffect(() => {
     setLoading(true);
@@ -32,76 +33,117 @@ const StockChart = ({ yhTicker, ccy }) => {
       .catch(e => { setError(e.message); setLoading(false); });
   }, [yhTicker, range]);
 
-  // ── chart geometry ──────────────────────────────────────────────────────────
-  const W = 800, H = 180, PAD = { t: 12, r: 16, b: 24, l: 16 };
-  const chartW = W - PAD.l - PAD.r;
-  const chartH = H - PAD.t - PAD.b;
+  // ── chart geometry (SVG user units) ────────────────────────────────────────
+  const W = 800, H = 230;
+  const PAD = { t: 14, r: 62, b: 30, l: 10 };
+  const chartW = W - PAD.l - PAD.r;   // 728
+  const chartH = H - PAD.t - PAD.b;   // 186
 
+  // ── helpers ─────────────────────────────────────────────────────────────────
+  const formatXLabel = (ts) => {
+    const d = new Date(ts);
+    const tz = 'Europe/Copenhagen';
+    if (range === '1d')  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+    if (range === '5d')  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: tz });
+    if (['1mo','3mo'].includes(range))        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: tz });
+    if (['6mo','ytd','1y'].includes(range))   return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: tz });
+    return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: tz });
+  };
+
+  const formatPrice = (v) => {
+    if (v >= 10000) return v.toFixed(0);
+    if (v >= 1000)  return v.toFixed(0);
+    if (v >= 100)   return v.toFixed(1);
+    return v.toFixed(2);
+  };
+
+  // ── convert client coords → SVG user coords via transform matrix ────────────
+  const clientToSVG = (clientX, clientY) => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    try {
+      const pt = svg.createSVGPoint();
+      pt.x = clientX;
+      pt.y = clientY;
+      return pt.matrixTransform(svg.getScreenCTM().inverse());
+    } catch { return null; }
+  };
+
+  const hitIndex = (svgX, pts) => {
+    const relX = svgX - PAD.l;
+    return Math.max(0, Math.min(pts.length - 1, Math.round((relX / chartW) * (pts.length - 1))));
+  };
+
+  // ── build chart ──────────────────────────────────────────────────────────────
   let svgContent = null;
   let periodReturn = null;
-  let color = '#16a34a'; // green default
+  let color = '#16a34a';
 
   if (data && data.points && data.points.length > 1) {
-    const pts = data.points;
-    const first = pts[0].c;
-    const last  = pts[pts.length - 1].c;
-    periodReturn = ((last - first) / first * 100);
+    const pts   = data.points;
+    periodReturn = (pts[pts.length - 1].c - pts[0].c) / pts[0].c * 100;
     color = periodReturn >= 0 ? '#16a34a' : '#dc2626';
 
     const minC = Math.min(...pts.map(p => p.c));
     const maxC = Math.max(...pts.map(p => p.c));
-    const rangeC = maxC - minC || 1;
+    const span = maxC - minC || 1;
 
     const xScale = i => PAD.l + (i / (pts.length - 1)) * chartW;
-    const yScale = v => PAD.t + chartH - ((v - minC) / rangeC) * chartH;
+    const yScale = v => PAD.t + chartH - ((v - minC) / span) * chartH;
 
-    // Build SVG path strings
-    const linePoints = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(p.c).toFixed(1)}`).join(' ');
-    const areaPoints = [
+    const lineD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(p.c).toFixed(1)}`).join(' ');
+    const areaD = [
       `M${xScale(0).toFixed(1)},${(PAD.t + chartH).toFixed(1)}`,
       ...pts.map((p, i) => `L${xScale(i).toFixed(1)},${yScale(p.c).toFixed(1)}`),
-      `L${xScale(pts.length - 1).toFixed(1)},${(PAD.t + chartH).toFixed(1)}`,
-      'Z',
+      `L${xScale(pts.length - 1).toFixed(1)},${(PAD.t + chartH).toFixed(1)}Z`,
     ].join(' ');
 
-    // Hover crosshair mouse handler
-    const handleMouseMove = (e) => {
-      const svg = e.currentTarget;
-      const rect = svg.getBoundingClientRect();
-      const mx = (e.clientX - rect.left) * (W / rect.width);
-      const relX = mx - PAD.l;
-      const idx = Math.max(0, Math.min(pts.length - 1, Math.round((relX / chartW) * (pts.length - 1))));
-      setHover({
-        x: xScale(idx),
-        y: yScale(pts[idx].c),
-        point: pts[idx],
-        idx,
-      });
+    // Y grid – 3 levels
+    const yLevels = [maxC, (minC + maxC) / 2, minC];
+
+    // X labels – 5 evenly spaced, anchored so they don't clip the edges
+    const xLabels = [0, 1, 2, 3, 4].map(i => {
+      const idx = Math.round(i * (pts.length - 1) / 4);
+      return { x: xScale(idx), label: formatXLabel(pts[idx].t), anchor: i === 0 ? 'start' : i === 4 ? 'end' : 'middle' };
+    });
+
+    // Mouse / touch handlers — use SVG coordinate transform for perfect alignment
+    const updateHover = (clientX, clientY) => {
+      const svgPt = clientToSVG(clientX, clientY);
+      if (!svgPt) return;
+      const idx = hitIndex(svgPt.x, pts);
+      setHover({ x: xScale(idx), y: yScale(pts[idx].c), point: pts[idx] });
     };
+
+    const handleMouseMove  = (e) => updateHover(e.clientX, e.clientY);
+    const handleTouchMove  = (e) => { e.preventDefault(); updateHover(e.touches[0].clientX, e.touches[0].clientY); };
 
     // Tooltip
     let tooltip = null;
     if (hover) {
       const d = new Date(hover.point.t);
-      const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      const priceStr = hover.point.c.toFixed(2);
-      const tipW = 130, tipH = 38;
-      const tipX = Math.min(hover.x + 8, W - tipW - 4);
-      const tipY = Math.max(hover.y - tipH - 6, 4);
+      const tz = 'Europe/Copenhagen';
+      const isIntra = ['1d', '5d'].includes(range);
+      const dateStr = isIntra
+        ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz })
+          + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz })
+        : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
+
+      const tipW = 170, tipH = 54;
+      const tipX = Math.min(hover.x + 12, PAD.l + chartW - tipW - 4);
+      const tipY = Math.max(hover.y - tipH - 10, PAD.t);
+
       tooltip = (
         <g>
-          {/* vertical crosshair line */}
           <line x1={hover.x} y1={PAD.t} x2={hover.x} y2={PAD.t + chartH}
-            stroke="#94a3b8" strokeWidth="1" strokeDasharray="3,3" />
-          {/* dot on line */}
-          <circle cx={hover.x} cy={hover.y} r="4" fill={color} stroke="white" strokeWidth="2" />
-          {/* tooltip box */}
-          <rect x={tipX} y={tipY} width={tipW} height={tipH} rx="4"
+            stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="4,3" />
+          <circle cx={hover.x} cy={hover.y} r="5" fill={color} stroke="white" strokeWidth="2.5" />
+          <rect x={tipX} y={tipY} width={tipW} height={tipH} rx="5"
             fill="white" stroke="#e2e8f0" strokeWidth="1"
-            style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.12))' }} />
-          <text x={tipX + 8} y={tipY + 14} fontSize="11" fill="#64748b">{dateStr}</text>
-          <text x={tipX + 8} y={tipY + 28} fontSize="13" fontWeight="600" fill="#0f172a">
-            {ccy} {priceStr}
+            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.10))' }} />
+          <text x={tipX + 10} y={tipY + 18} fontSize="17" fill="#64748b">{dateStr}</text>
+          <text x={tipX + 10} y={tipY + 40} fontSize="22" fontWeight="600" fill="#0f172a">
+            {ccy} {hover.point.c.toFixed(2)}
           </text>
         </g>
       );
@@ -109,21 +151,52 @@ const StockChart = ({ yhTicker, ccy }) => {
 
     svgContent = (
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
-        style={{ width: '100%', height: '100%', display: 'block', cursor: 'crosshair' }}
+        width="100%"
+        style={{ display: 'block', cursor: 'crosshair', touchAction: 'none' }}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHover(null)}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={() => setHover(null)}
       >
         <defs>
-          <linearGradient id={`grad-${yhTicker}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+          <linearGradient id={`sg-${yhTicker}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor={color} stopOpacity="0.20" />
             <stop offset="100%" stopColor={color} stopOpacity="0.01" />
           </linearGradient>
         </defs>
-        {/* area fill */}
-        <path d={areaPoints} fill={`url(#grad-${yhTicker})`} />
-        {/* line */}
-        <path d={linePoints} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+
+        {/* Y grid lines */}
+        {yLevels.map((v, i) => (
+          <line key={i}
+            x1={PAD.l} y1={yScale(v)} x2={PAD.l + chartW} y2={yScale(v)}
+            stroke="#f1f5f9" strokeWidth="1" />
+        ))}
+
+        {/* area fill + price line */}
+        <path d={areaD} fill={`url(#sg-${yhTicker})`} />
+        <path d={lineD} fill="none" stroke={color} strokeWidth="2.5"
+          strokeLinejoin="round" strokeLinecap="round" />
+
+        {/* Y axis labels (right side) */}
+        {yLevels.map((v, i) => (
+          <text key={i}
+            x={PAD.l + chartW + 8} y={yScale(v) + 6}
+            fontSize="18" fill="#94a3b8" textAnchor="start">
+            {formatPrice(v)}
+          </text>
+        ))}
+
+        {/* X axis labels (bottom) */}
+        {xLabels.map((xl, i) => (
+          <text key={i}
+            x={xl.x} y={PAD.t + chartH + 22}
+            fontSize="17" fill="#94a3b8" textAnchor={xl.anchor}>
+            {xl.label}
+          </text>
+        ))}
+
         {tooltip}
       </svg>
     );
@@ -131,10 +204,11 @@ const StockChart = ({ yhTicker, ccy }) => {
 
   // ── render ───────────────────────────────────────────────────────────────────
   return (
-    <div style={{ background: 'white', borderRadius: '12px', padding: '16px 20px', marginBottom: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-      {/* header row: period return + range tabs */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, color: periodReturn != null ? color : '#64748b' }}>
+    <div style={{ background: 'white', borderRadius: '12px', padding: '16px 20px 10px', marginBottom: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+
+      {/* header: period return + scrollable range tabs */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', gap: '8px' }}>
+        <div style={{ fontSize: '15px', fontWeight: 600, color: periodReturn != null ? color : '#64748b', flexShrink: 0 }}>
           {periodReturn != null
             ? `${periodReturn >= 0 ? '+' : ''}${periodReturn.toFixed(2)}%`
             : loading ? 'Loading…' : error ? 'Error' : '—'}
@@ -144,42 +218,44 @@ const StockChart = ({ yhTicker, ccy }) => {
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '4px' }}>
+
+        {/* tabs — overflow scrolls horizontally, scrollbar hidden on touch devices */}
+        <div style={{
+          display: 'flex', gap: '4px',
+          overflowX: 'auto', flexShrink: 1, minWidth: 0,
+          paddingBottom: '2px',
+          msOverflowStyle: 'none', scrollbarWidth: 'none',
+        }}>
           {RANGES.map(r => (
-            <button
-              key={r.value}
-              onClick={() => setRange(r.value)}
-              style={{
-                padding: '3px 10px',
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: r.value === range ? 600 : 400,
-                background: r.value === range ? '#1e293b' : '#f1f5f9',
-                color: r.value === range ? 'white' : '#64748b',
-                transition: 'background 0.15s',
-              }}
-            >
-              {r.label}
-            </button>
+            <button key={r.value} onClick={() => setRange(r.value)} style={{
+              flexShrink: 0,
+              padding: '3px 10px',
+              borderRadius: '6px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: r.value === range ? 600 : 400,
+              background: r.value === range ? '#1e293b' : '#f1f5f9',
+              color:      r.value === range ? 'white'   : '#64748b',
+              whiteSpace: 'nowrap',
+            }}>{r.label}</button>
           ))}
         </div>
       </div>
 
-      {/* chart area */}
-      <div style={{ height: '180px', position: 'relative' }}>
+      {/* chart area — height flows from SVG aspect ratio */}
+      <div style={{ position: 'relative', minHeight: '40px' }}>
         {loading && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '13px' }}>
+          <div style={{ padding: '30px 0', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
             Loading chart…
           </div>
         )}
         {error && !loading && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', fontSize: '13px' }}>
+          <div style={{ padding: '30px 0', textAlign: 'center', color: '#ef4444', fontSize: '13px' }}>
             Could not load chart data
           </div>
         )}
-        {svgContent}
+        {!loading && !error && svgContent}
       </div>
     </div>
   );
