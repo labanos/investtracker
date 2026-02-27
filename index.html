@@ -390,8 +390,8 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, isLive, l
         const next = sortTxns([...txns, created]);
         setTxns(next); onTxnsChanged(p.ticker, next);
       } else {
-        const res = await fetch(`${TRANSACTIONS_API}?id=${editingTxnId}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        const res = await fetch(`${TRANSACTIONS_API}?id=${editingTxnId}&_method=PUT`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error();
@@ -406,7 +406,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, isLive, l
   const deleteTxn = async (id) => {
     if (!window.confirm('Delete this transaction?')) return;
     try {
-      await fetch(`${TRANSACTIONS_API}?id=${id}`, { method: 'DELETE' });
+      await fetch(`${TRANSACTIONS_API}?id=${id}&_method=DELETE`, { method: 'POST' });
       const next = txns.filter(t => t.id !== id);
       setTxns(next); onTxnsChanged(p.ticker, next);
     } catch (_) { setTxnError('Could not delete — check your connection.'); }
@@ -461,8 +461,8 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, isLive, l
         const created = await res.json();
         setNotes(prev => sortNotes([...prev, created]));
       } else {
-        const res = await fetch(`${NOTES_API}?id=${editingId}`, {
-          method: 'PUT',
+        const res = await fetch(`${NOTES_API}?id=${editingId}&_method=PUT`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ date: noteForm.date, text: noteForm.text.trim() }),
         });
@@ -481,7 +481,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, isLive, l
   const deleteNote = async (id) => {
     if (!window.confirm('Delete this note?')) return;
     try {
-      await fetch(`${NOTES_API}?id=${id}`, { method: 'DELETE' });
+      await fetch(`${NOTES_API}?id=${id}&_method=DELETE`, { method: 'POST' });
       setNotes(prev => prev.filter(n => n.id !== id));
     } catch (_) {
       setNoteError('Could not delete — check your connection.');
