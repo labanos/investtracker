@@ -29,38 +29,42 @@ const { useState, useEffect, useCallback } = React;
 // ─── Portfolio data ────────────────────────────────────────────────────────
 // yhTicker = Yahoo Finance symbol | cachedPrice/cachedChangePct = fallback from last sync
 const PORTFOLIO = [
-  { ticker:'RGTI',     yhTicker:'RGTI',       company:'Rigetti Computing',       ccy:'USD', shares:100,  avgCost:9.91,      cachedPrice:18.82,   cachedChg:0.0675  },
-  { ticker:'LULU',     yhTicker:'LULU',       company:'Lululemon Athletica',      ccy:'USD', shares:53,   avgCost:164.97,    cachedPrice:187.38,  cachedChg:0.0265  },
-  { ticker:'NOVO-B',   yhTicker:'NOVO-B.CO',  company:'Novo Nordisk',             ccy:'DKK', shares:475,  avgCost:364.3228,  cachedPrice:239.0,   cachedChg:0.0038  },
-  { ticker:'ROCK-B',   yhTicker:'ROCK-B.CO',  company:'ROCKWOOL Class B',         ccy:'DKK', shares:375,  avgCost:173.5783,  cachedPrice:210.5,   cachedChg:-0.0071 },
-  { ticker:'JYSK',     yhTicker:'JYSK.CO',    company:'Jyske Bank',               ccy:'DKK', shares:2367, avgCost:356.1019,  cachedPrice:948.0,   cachedChg:-0.0037 },
-  { ticker:'NFLX',     yhTicker:'NFLX',       company:'Netflix',                  ccy:'USD', shares:120,  avgCost:27.697,    cachedPrice:84.17,   cachedChg:0.0189  },
-  { ticker:'CSU',      yhTicker:'CSU.TO',     company:'Constellation Software',   ccy:'CAD', shares:8,    avgCost:3161.3675, cachedPrice:2520.0,  cachedChg:0.0246  },
-  { ticker:'CHG',      yhTicker:'CHG.DE',     company:'CHAPTERS Group',           ccy:'EUR', shares:400,  avgCost:34.05,     cachedPrice:26.7,    cachedChg:-0.0220 },
-  { ticker:'AAPL',     yhTicker:'AAPL',       company:'Apple',                    ccy:'USD', shares:75,   avgCost:137.51,    cachedPrice:273.63,  cachedChg:-0.0015 },
-  { ticker:'GMAB',     yhTicker:'GMAB.CO',    company:'Genmab',                   ccy:'DKK', shares:40,   avgCost:1382.6,    cachedPrice:1831.5,  cachedChg:-0.0008 },
-  { ticker:'DANSKE',   yhTicker:'DANSKE.CO',  company:'Danske Bank',              ccy:'DKK', shares:710,  avgCost:114.7752,  cachedPrice:333.0,   cachedChg:-0.0063 },
-  { ticker:'ASML',     yhTicker:'ASML.AS',    company:'ASML Holding',             ccy:'EUR', shares:20,   avgCost:696.605,   cachedPrice:1250.6,  cachedChg:-0.0217 },
-  { ticker:'NVDA',     yhTicker:'NVDA',       company:'NVIDIA',                   ccy:'USD', shares:104,  avgCost:119.2683,  cachedPrice:188.51,  cachedChg:-0.0318 },
-  { ticker:'IONQ',     yhTicker:'IONQ',       company:'IonQ',                     ccy:'USD', shares:25,   avgCost:36.88,     cachedPrice:40.76,   cachedChg:0.2186  },
-  { ticker:'MSFT',     yhTicker:'MSFT',       company:'Microsoft',                ccy:'USD', shares:25,   avgCost:404.078,   cachedPrice:405.37,  cachedChg:0.0138  },
-  { ticker:'V',        yhTicker:'V',          company:'Visa',                     ccy:'USD', shares:20,   avgCost:229.78,    cachedPrice:319.19,  cachedChg:0.0195  },
-  { ticker:'NU',       yhTicker:'NU',         company:'Nu Holdings',              ccy:'USD', shares:800,  avgCost:12.4489,   cachedPrice:15.64,   cachedChg:-0.0541 },
-  { ticker:'BKNG',     yhTicker:'BKNG',       company:'Booking Holdings',         ccy:'USD', shares:2,    avgCost:5119.75,   cachedPrice:4251.93, cachedChg:0.0214  },
-  { ticker:'MLI',      yhTicker:'MLI',        company:'Mueller Industries',       ccy:'USD', shares:210,  avgCost:46.1674,   cachedPrice:118.27,  cachedChg:-0.0027 },
-  { ticker:'GOOGL',    yhTicker:'GOOGL',      company:'Alphabet',                 ccy:'USD', shares:120,  avgCost:95.04,     cachedPrice:305.68,  cachedChg:-0.0231 },
-  { ticker:'SNPS',     yhTicker:'SNPS',       company:'Synopsys',                 ccy:'USD', shares:40,   avgCost:437.237,   cachedPrice:432.52,  cachedChg:-0.0371 },
-  { ticker:'TSM',      yhTicker:'TSM',        company:'Taiwan Semiconductor',     ccy:'USD', shares:100,  avgCost:79.055,    cachedPrice:375.45,  cachedChg:-0.0282 },
-  { ticker:'ADBE',     yhTicker:'ADBE',       company:'Adobe',                    ccy:'USD', shares:26,   avgCost:335.74,    cachedPrice:262.32,  cachedChg:0.0121  },
-  { ticker:'QUBT',     yhTicker:'QUBT',       company:'Quantum Computing',        ccy:'USD', shares:100,  avgCost:10.31,     cachedPrice:8.95,    cachedChg:0.0346  },
-  { ticker:'MAERSK-B', yhTicker:'MAERSK-B.CO',company:'A.P. Møller-Mærsk',       ccy:'DKK', shares:15,   avgCost:11705.7333,cachedPrice:15200.0, cachedChg:-0.0095 },
-  { ticker:'NET',      yhTicker:'NET',        company:'Cloudflare',               ccy:'USD', shares:30,   avgCost:170.0,     cachedPrice:174.61,  cachedChg:0.0176  },
-  { ticker:'QBTS',     yhTicker:'QBTS',       company:'D-Wave Quantum',           ccy:'USD', shares:200,  avgCost:5.51,      cachedPrice:20.93,   cachedChg:0.0651  },
+  { ticker:'RGTI',     yhTicker:'RGTI',        company:'Rigetti Computing',       ccy:'USD', cachedPrice:18.82,   cachedChg:0.0675  },
+  { ticker:'LULU',     yhTicker:'LULU',        company:'Lululemon Athletica',     ccy:'USD', cachedPrice:187.38,  cachedChg:0.0265  },
+  { ticker:'NOVO-B',   yhTicker:'NOVO-B.CO',   company:'Novo Nordisk',            ccy:'DKK', cachedPrice:239.0,   cachedChg:0.0038  },
+  { ticker:'ROCK-B',   yhTicker:'ROCK-B.CO',   company:'ROCKWOOL Class B',        ccy:'DKK', cachedPrice:210.5,   cachedChg:-0.0071 },
+  { ticker:'JYSK',     yhTicker:'JYSK.CO',     company:'Jyske Bank',              ccy:'DKK', cachedPrice:948.0,   cachedChg:-0.0037 },
+  { ticker:'NFLX',     yhTicker:'NFLX',        company:'Netflix',                 ccy:'USD', cachedPrice:84.17,   cachedChg:0.0189  },
+  { ticker:'CSU',      yhTicker:'CSU.TO',      company:'Constellation Software',  ccy:'CAD', cachedPrice:2520.0,  cachedChg:0.0246  },
+  { ticker:'CHG',      yhTicker:'CHG.DE',      company:'CHAPTERS Group',          ccy:'EUR', cachedPrice:26.7,    cachedChg:-0.0220 },
+  { ticker:'AAPL',     yhTicker:'AAPL',        company:'Apple',                   ccy:'USD', cachedPrice:273.63,  cachedChg:-0.0015 },
+  { ticker:'GMAB',     yhTicker:'GMAB.CO',     company:'Genmab',                  ccy:'DKK', cachedPrice:1831.5,  cachedChg:-0.0008 },
+  { ticker:'DANSKE',   yhTicker:'DANSKE.CO',   company:'Danske Bank',             ccy:'DKK', cachedPrice:333.0,   cachedChg:-0.0063 },
+  { ticker:'ASML',     yhTicker:'ASML.AS',     company:'ASML Holding',            ccy:'EUR', cachedPrice:1250.6,  cachedChg:-0.0217 },
+  { ticker:'NVDA',     yhTicker:'NVDA',        company:'NVIDIA',                  ccy:'USD', cachedPrice:188.51,  cachedChg:-0.0318 },
+  { ticker:'IONQ',     yhTicker:'IONQ',        company:'IonQ',                    ccy:'USD', cachedPrice:40.76,   cachedChg:0.2186  },
+  { ticker:'MSFT',     yhTicker:'MSFT',        company:'Microsoft',               ccy:'USD', cachedPrice:405.37,  cachedChg:0.0138  },
+  { ticker:'V',        yhTicker:'V',           company:'Visa',                    ccy:'USD', cachedPrice:319.19,  cachedChg:0.0195  },
+  { ticker:'NU',       yhTicker:'NU',          company:'Nu Holdings',             ccy:'USD', cachedPrice:15.64,   cachedChg:-0.0541 },
+  { ticker:'BKNG',     yhTicker:'BKNG',        company:'Booking Holdings',        ccy:'USD', cachedPrice:4251.93, cachedChg:0.0214  },
+  { ticker:'MLI',      yhTicker:'MLI',         company:'Mueller Industries',      ccy:'USD', cachedPrice:118.27,  cachedChg:-0.0027 },
+  { ticker:'GOOGL',    yhTicker:'GOOGL',       company:'Alphabet',                ccy:'USD', cachedPrice:305.68,  cachedChg:-0.0231 },
+  { ticker:'SNPS',     yhTicker:'SNPS',        company:'Synopsys',                ccy:'USD', cachedPrice:432.52,  cachedChg:-0.0371 },
+  { ticker:'TSM',      yhTicker:'TSM',         company:'Taiwan Semiconductor',    ccy:'USD', cachedPrice:375.45,  cachedChg:-0.0282 },
+  { ticker:'ADBE',     yhTicker:'ADBE',        company:'Adobe',                   ccy:'USD', cachedPrice:262.32,  cachedChg:0.0121  },
+  { ticker:'QUBT',     yhTicker:'QUBT',        company:'Quantum Computing',       ccy:'USD', cachedPrice:8.95,    cachedChg:0.0346  },
+  { ticker:'MAERSK-B', yhTicker:'MAERSK-B.CO', company:'A.P. Møller-Mærsk',      ccy:'DKK', cachedPrice:15200.0, cachedChg:-0.0095 },
+  { ticker:'NET',      yhTicker:'NET',         company:'Cloudflare',              ccy:'USD', cachedPrice:174.61,  cachedChg:0.0176  },
+  { ticker:'QBTS',     yhTicker:'QBTS',        company:'D-Wave Quantum',          ccy:'USD', cachedPrice:20.93,   cachedChg:0.0651  },
 ];
 
-// ─── Transactions ──────────────────────────────────────────────────────────
+// ─── APIs ──────────────────────────────────────────────────────────────────
+const NOTES_API        = 'https://labanos.dk/notes.php';
+const TRANSACTIONS_API = 'https://labanos.dk/transactions.php';
+
+// ─── Seed transactions (one-time migration to DB on first load) ─────────────
 // Each entry: { date:'YYYY-MM-DD', type:'buy'|'sell', shares, price, fees, note }
-const TRANSACTIONS = {
+const SEED_TRANSACTIONS = {
   'RGTI': [
     { date:'2025-01-14', type:'buy', shares:100, price:9.91, fees:0 },
   ],
@@ -223,9 +227,6 @@ const TRANSACTIONS = {
   ],
 };
 
-// ─── Notes API ─────────────────────────────────────────────────────────────
-const NOTES_API = 'https://labanos.dk/notes.php';
-
 const CACHED_FX = { USD: 6.32546, EUR: 7.471825, CAD: 4.6206, DKK: 1.0 };
 // ↑ Update CACHED_AS_OF whenever you refresh the cached prices/FX above
 const CACHED_AS_OF = new Date('2026-02-26T17:00:00');
@@ -235,6 +236,76 @@ const n = (v, d=0) => isNaN(v)||v==null ? '–' : Math.abs(v).toLocaleString('da
 const pct = (v) => v==null||isNaN(v) ? '–' : (v>=0?'+':'−') + n(Math.abs(v*100),2) + '%';
 const signed = (v, d=0) => v==null||isNaN(v) ? '–' : (v>=0?'+':'−') + n(Math.abs(v),d);
 const clr = (v) => !v && v!==0 ? 'text-gray-400' : v > 0 ? 'text-emerald-500' : v < 0 ? 'text-red-500' : 'text-gray-400';
+
+// ─── computePosition ───────────────────────────────────────────────────────
+// Derives shares held and average cost from a transaction array
+function computePosition(txns) {
+  const buys  = txns.filter(t => t.type === 'buy');
+  const sells = txns.filter(t => t.type === 'sell');
+  const buyShares  = buys.reduce((s, t) => s + Number(t.shares), 0);
+  const sellShares = sells.reduce((s, t) => s + Number(t.shares), 0);
+  const buyCost    = buys.reduce((s, t) => s + Number(t.shares) * Number(t.price) + Number(t.fees || 0), 0);
+  return {
+    shares:  buyShares - sellShares,
+    avgCost: buyShares > 0 ? buyCost / buyShares : 0,
+  };
+}
+
+// ─── TransactionForm ───────────────────────────────────────────────────────
+function TransactionForm({ form, onChange, onSave, onCancel, saving, error }) {
+  return (
+    <div className="bg-white rounded-xl border border-blue-100 shadow-sm px-4 py-3 mb-2">
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Date</div>
+          <input type="date" value={form.date}
+            onChange={e => onChange(f => ({ ...f, date: e.target.value }))}
+            className="w-full text-[12px] border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-blue-300" />
+        </div>
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Type</div>
+          <div className="flex gap-1">
+            {['buy','sell'].map(t => (
+              <button key={t} onClick={() => onChange(f => ({ ...f, type: t }))}
+                className={`flex-1 text-[11px] font-semibold py-1 rounded-md border transition-colors ${
+                  form.type === t
+                    ? t === 'buy' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-red-500 text-white border-red-500'
+                    : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                }`}>{t.toUpperCase()}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2 mb-2">
+        {[['Shares','shares','1'],['Price','price','0.0001'],['Fees','fees','0.01']].map(([label,key,step]) => (
+          <div key={key}>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{label}</div>
+            <input type="number" step={step} value={form[key]}
+              onChange={e => onChange(f => ({ ...f, [key]: e.target.value }))}
+              placeholder={key === 'fees' ? '0' : ''}
+              className="w-full text-[12px] border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-blue-300 mono" />
+          </div>
+        ))}
+      </div>
+      <div className="mb-2">
+        <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Note <span className="normal-case">(optional)</span></div>
+        <input type="text" value={form.note}
+          onChange={e => onChange(f => ({ ...f, note: e.target.value }))}
+          placeholder="Optional note…"
+          className="w-full text-[12px] border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-blue-300" />
+      </div>
+      {error && <div className="text-[11px] text-red-500 mb-1">{error}</div>}
+      <div className="flex gap-2 justify-end">
+        <button onClick={onCancel}
+          className="text-[12px] text-gray-400 hover:text-gray-600 px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors">Cancel</button>
+        <button onClick={onSave} disabled={saving || !form.shares || !form.price}
+          className="text-[12px] font-medium bg-gray-900 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 hover:bg-gray-700 transition-colors">
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── NoteForm ──────────────────────────────────────────────────────────────
 function NoteForm({ form, onChange, onSave, onCancel, saving, error, textareaRef }) {
@@ -271,8 +342,75 @@ function NoteForm({ form, onChange, onSave, onCancel, saving, error, textareaRef
 }
 
 // ─── Detail Page ───────────────────────────────────────────────────────────
-function DetailPage({ position: p, onBack, isLive, lastUpdated }) {
-  const txns = (TRANSACTIONS[p.ticker] || []).slice().sort((a,b) => b.date.localeCompare(a.date));
+function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, isLive, lastUpdated }) {
+
+  // ── Transactions state ──────────────────────────────────────────────────
+  const [txns,         setTxns]        = useState(initialTxns || []);
+  const [addingTxn,    setAddingTxn]   = useState(false);
+  const [editingTxnId, setEditingTxnId]= useState(null);
+  const [txnForm,      setTxnForm]     = useState({ date:'', type:'buy', shares:'', price:'', fees:'0', note:'' });
+  const [savingTxn,    setSavingTxn]   = useState(false);
+  const [txnError,     setTxnError]    = useState(null);
+
+  const todayStrT = () => new Date().toISOString().split('T')[0];
+  const sortTxns  = arr => [...arr].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+
+  const openAddTxn = () => {
+    setAddingTxn(true); setEditingTxnId(null);
+    setTxnForm({ date: todayStrT(), type:'buy', shares:'', price:'', fees:'0', note:'' });
+    setTxnError(null);
+  };
+  const openEditTxn = (t) => {
+    setEditingTxnId(t.id); setAddingTxn(false);
+    setTxnForm({ date:t.date, type:t.type, shares:String(t.shares), price:String(t.price), fees:String(t.fees), note:t.note||'' });
+    setTxnError(null);
+  };
+  const cancelTxn = () => { setAddingTxn(false); setEditingTxnId(null); setTxnError(null); };
+
+  const saveTxn = async () => {
+    if (!txnForm.shares || !txnForm.price) return;
+    setSavingTxn(true); setTxnError(null);
+    const payload = {
+      ticker: p.ticker,
+      date:   txnForm.date,
+      type:   txnForm.type,
+      shares: parseFloat(txnForm.shares),
+      price:  parseFloat(txnForm.price),
+      fees:   parseFloat(txnForm.fees  || 0),
+      note:   txnForm.note.trim(),
+    };
+    try {
+      if (addingTxn) {
+        const res = await fetch(TRANSACTIONS_API, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error();
+        const created = await res.json();
+        const next = sortTxns([...txns, created]);
+        setTxns(next); onTxnsChanged(p.ticker, next);
+      } else {
+        const res = await fetch(`${TRANSACTIONS_API}?id=${editingTxnId}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error();
+        const next = sortTxns(txns.map(t => t.id === editingTxnId ? { ...t, ...payload, id: editingTxnId } : t));
+        setTxns(next); onTxnsChanged(p.ticker, next);
+      }
+      cancelTxn();
+    } catch (_) { setTxnError('Could not save — check your connection.'); }
+    setSavingTxn(false);
+  };
+
+  const deleteTxn = async (id) => {
+    if (!window.confirm('Delete this transaction?')) return;
+    try {
+      await fetch(`${TRANSACTIONS_API}?id=${id}`, { method: 'DELETE' });
+      const next = txns.filter(t => t.id !== id);
+      setTxns(next); onTxnsChanged(p.ticker, next);
+    } catch (_) { setTxnError('Could not delete — check your connection.'); }
+  };
 
   // ── Notes state ────────────────────────────────────────────────────────
   const [notes,      setNotes]      = useState([]);
@@ -402,13 +540,32 @@ function DetailPage({ position: p, onBack, isLive, lastUpdated }) {
 
       {/* ── Transactions ── */}
       <div className="mx-4 mb-6">
-        <h2 className="text-[13px] font-semibold text-gray-600 uppercase tracking-wide mb-2">Transactions</h2>
-        {txns.length === 0 ? (
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-[13px] font-semibold text-gray-600 uppercase tracking-wide">Transactions</h2>
+          {!addingTxn && (
+            <button onClick={openAddTxn}
+              className="text-[12px] text-blue-500 hover:text-blue-600 font-medium px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors">
+              + Add
+            </button>
+          )}
+        </div>
+
+        {/* Add form */}
+        {addingTxn && (
+          <TransactionForm form={txnForm} onChange={setTxnForm} onSave={saveTxn}
+            onCancel={cancelTxn} saving={savingTxn} error={txnError} />
+        )}
+
+        {txns.length === 0 && !addingTxn ? (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-6 text-center text-gray-400 text-sm">
-            No transactions yet — add them to the <code className="bg-gray-100 px-1 rounded">TRANSACTIONS</code> object in the source file.
+            No transactions yet —{' '}
+            <button onClick={openAddTxn} className="text-blue-400 font-medium hover:underline">add one</button>
           </div>
-        ) : (
+        ) : txns.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            {txnError && !addingTxn && !editingTxnId && (
+              <div className="px-4 py-2 text-[11px] text-red-500 bg-red-50">{txnError}</div>
+            )}
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="border-b border-gray-100 text-gray-400 text-[11px] uppercase tracking-wide">
@@ -419,22 +576,38 @@ function DetailPage({ position: p, onBack, isLive, lastUpdated }) {
                   <th className="px-3 py-2 text-right">Fees</th>
                   <th className="px-3 py-2 text-right">Value</th>
                   <th className="px-3 py-2 text-left">Note</th>
+                  <th className="px-2 py-2"></th>
                 </tr>
               </thead>
               <tbody>
-                {txns.map((t, i) => (
-                  <tr key={i} className={`border-b border-gray-50 ${i%2===0?'bg-white':'bg-gray-50/40'}`}>
-                    <td className="px-3 py-2 mono text-gray-500">{fmtDate(t.date)}</td>
-                    <td className="px-3 py-2">{typeTag(t.type)}</td>
-                    <td className="px-3 py-2 text-right mono text-gray-700">{n(t.shares,0)}</td>
-                    <td className="px-3 py-2 text-right mono text-gray-700">{n(t.price,2)}</td>
-                    <td className="px-3 py-2 text-right mono text-gray-400">{t.fees ? n(t.fees,2) : '–'}</td>
-                    <td className={`px-3 py-2 text-right mono font-medium ${t.type==='buy'?'text-gray-700':'text-emerald-600'}`}>
-                      {t.type==='buy' ? '−'+n(t.shares*t.price+(t.fees||0),0) : '+'+n(t.shares*t.price-(t.fees||0),0)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500 max-w-[180px] truncate">{t.note||''}</td>
-                  </tr>
-                ))}
+                {txns.map((t, i) =>
+                  editingTxnId === t.id ? (
+                    <tr key={t.id}>
+                      <td colSpan={8} className="p-2">
+                        <TransactionForm form={txnForm} onChange={setTxnForm} onSave={saveTxn}
+                          onCancel={cancelTxn} saving={savingTxn} error={txnError} />
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={t.id} className={`border-b border-gray-50 ${i%2===0?'bg-white':'bg-gray-50/40'}`}>
+                      <td className="px-3 py-2 mono text-gray-500">{fmtDate(t.date)}</td>
+                      <td className="px-3 py-2">{typeTag(t.type)}</td>
+                      <td className="px-3 py-2 text-right mono text-gray-700">{n(t.shares,0)}</td>
+                      <td className="px-3 py-2 text-right mono text-gray-700">{n(t.price,2)}</td>
+                      <td className="px-3 py-2 text-right mono text-gray-400">{t.fees ? n(t.fees,2) : '–'}</td>
+                      <td className={`px-3 py-2 text-right mono font-medium ${t.type==='buy'?'text-gray-700':'text-emerald-600'}`}>
+                        {t.type==='buy' ? '−'+n(t.shares*t.price+(t.fees||0),0) : '+'+n(t.shares*t.price-(t.fees||0),0)}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500 max-w-[140px] truncate">{t.note||''}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">
+                        <button onClick={() => openEditTxn(t)} title="Edit"
+                          className="text-gray-300 hover:text-blue-400 transition-colors text-[13px] px-1">✎</button>
+                        <button onClick={() => deleteTxn(t.id)} title="Delete"
+                          className="text-gray-300 hover:text-red-400 transition-colors text-[13px] px-1">✕</button>
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
               {txns.length > 1 && (
                 <tfoot className="border-t border-gray-200 bg-gray-50 text-[11px] text-gray-500">
@@ -444,7 +617,7 @@ function DetailPage({ position: p, onBack, isLive, lastUpdated }) {
                       {totalBought > 0 && <span className="text-gray-700">−{n(totalBought,0)}</span>}
                       {totalSold > 0 && <span className="text-emerald-600 ml-2">+{n(totalSold,0)}</span>}
                     </td>
-                    <td />
+                    <td /><td />
                   </tr>
                 </tfoot>
               )}
@@ -537,6 +710,56 @@ function App() {
   const [notice, setNotice]       = useState(null);
   const [selectedTicker, setSelectedTicker] = useState(null);
 
+  // ── Transactions from DB ──────────────────────────────────────────────
+  // allTxns: { [ticker]: [{id, date, type, shares, price, fees, note}, ...] }
+  const [allTxns,    setAllTxns]    = useState({});
+  const [txnsLoaded, setTxnsLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch(TRANSACTIONS_API)
+      .then(r => r.ok ? r.json() : [])
+      .then(async rows => {
+        // Group by ticker
+        const grouped = {};
+        rows.forEach(t => { (grouped[t.ticker] = grouped[t.ticker] || []).push(t); });
+
+        if (rows.length === 0) {
+          // First ever load — seed from SEED_TRANSACTIONS
+          const flat = [];
+          Object.entries(SEED_TRANSACTIONS).forEach(([ticker, txns]) =>
+            txns.forEach(t => flat.push({ ...t, ticker }))
+          );
+          if (flat.length > 0) {
+            const res = await fetch(`${TRANSACTIONS_API}?batch=1`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(flat),
+            });
+            if (res.ok) {
+              // Re-fetch now that DB is seeded
+              const seeded = await fetch(TRANSACTIONS_API).then(r => r.json());
+              seeded.forEach(t => { (grouped[t.ticker] = grouped[t.ticker] || []).push(t); });
+            }
+          }
+        }
+        setAllTxns(grouped);
+        setTxnsLoaded(true);
+      })
+      .catch(() => {
+        // Fall back to seed data if API unreachable
+        const grouped = {};
+        Object.entries(SEED_TRANSACTIONS).forEach(([ticker, txns]) => {
+          grouped[ticker] = txns.map((t, i) => ({ ...t, ticker, id: -(i+1) }));
+        });
+        setAllTxns(grouped);
+        setTxnsLoaded(true);
+      });
+  }, []);
+
+  // Called by DetailPage when it adds/edits/deletes a transaction
+  const handleTxnsChanged = useCallback((ticker, updatedTxns) => {
+    setAllTxns(prev => ({ ...prev, [ticker]: updatedTxns }));
+  }, []);
+
   const fetchPrices = useCallback(async (silent=false) => {
     if (!silent) setLoading(true);
     setRefreshing(true);
@@ -603,18 +826,18 @@ function App() {
     return () => clearInterval(iv);
   }, []);
 
-  // Enrich each position
+  // Enrich each position — shares/avgCost derived from DB transactions
   const enriched = PORTFOLIO.map(p => {
-    const pd = prices[p.yhTicker] || { price: p.cachedPrice, chgPct: p.cachedChg };
-    const fxRate       = fx[p.ccy] || 1;
-    const costDKK      = p.shares * p.avgCost * fxRate;
-    const valueDKK     = p.shares * pd.price * fxRate;
-    const glDKK        = valueDKK - costDKK;
-    const glPct        = costDKK > 0 ? glDKK / costDKK : 0;
-    // today's change: exact calc via prev price
-    const prevPrice    = pd.chgPct !== -1 ? pd.price / (1 + pd.chgPct) : pd.price;
-    const todayDKK     = p.shares * (pd.price - prevPrice) * fxRate;
-    return { ...p, price: pd.price, chgPct: pd.chgPct, fxRate, costDKK, valueDKK, glDKK, glPct, todayDKK };
+    const { shares, avgCost } = computePosition(allTxns[p.ticker] || []);
+    const pd       = prices[p.yhTicker] || { price: p.cachedPrice, chgPct: p.cachedChg };
+    const fxRate   = fx[p.ccy] || 1;
+    const costDKK  = shares * avgCost * fxRate;
+    const valueDKK = shares * pd.price * fxRate;
+    const glDKK    = valueDKK - costDKK;
+    const glPct    = costDKK > 0 ? glDKK / costDKK : 0;
+    const prevPrice = pd.chgPct !== -1 ? pd.price / (1 + pd.chgPct) : pd.price;
+    const todayDKK  = shares * (pd.price - prevPrice) * fxRate;
+    return { ...p, shares, avgCost, price: pd.price, chgPct: pd.chgPct, fxRate, costDKK, valueDKK, glDKK, glPct, todayDKK };
   });
 
   const totalValue  = enriched.reduce((s,p) => s + p.valueDKK, 0);
@@ -630,7 +853,16 @@ function App() {
   // ── Detail page navigation ──
   if (selectedTicker) {
     const pos = withWeight.find(p => p.ticker === selectedTicker);
-    if (pos) return <DetailPage position={pos} onBack={() => setSelectedTicker(null)} isLive={isLive} lastUpdated={lastUpdated} />;
+    if (pos) return (
+      <DetailPage
+        position={pos}
+        initialTxns={(allTxns[selectedTicker] || []).slice().sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id)}
+        onBack={() => setSelectedTicker(null)}
+        onTxnsChanged={handleTxnsChanged}
+        isLive={isLive}
+        lastUpdated={lastUpdated}
+      />
+    );
   }
 
   const sorted = [...withWeight].sort((a,b) => {
