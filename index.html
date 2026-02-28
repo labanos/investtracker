@@ -1221,7 +1221,7 @@ function App() {
         // Restore session if token exists
         if (token) {
           return fetch(AUTH_API, { headers: { Authorization: `Bearer ${token}` } })
-            .then(r => r.ok ? r.json() : null)
+            .then(r => { if (!r.ok) { localStorage.removeItem('auth_token'); return null; } return r.json(); })
             .then(u => { if (u) setUser(u); })
             .finally(() => setAuthChecked(true));
         }
