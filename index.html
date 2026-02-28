@@ -967,9 +967,8 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
         ) : notes.length === 0 && !addingNote ? (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-6 text-center text-gray-400 text-sm">
             No notes yet{user ? (
-              <> — <button onClick={openAdd} className="text-blue-400 font-medium hover:underline">
-              add one
-            </button>
+              <> — <button onClick={openAdd} className="text-blue-400 font-medium hover:underline">add one</button></>
+            ) : '.'}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
