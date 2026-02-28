@@ -1304,6 +1304,7 @@ function App() {
   const [showAddModal,  setShowAddModal]  = useState(false);
   const [showInsights,  setShowInsights]  = useState(false);
   const [metaLoading,   setMetaLoading]   = useState(0);
+  const metaAttempted   = React.useRef(new Set()); // IDs attempted this session
 
   // ── Portfolios state ──
   const [portfolios,    setPortfolios]    = useState([]);
@@ -1363,8 +1364,15 @@ function App() {
   // ── Fetch + cache sector/country metadata for holdings that lack it ──
   useEffect(() => {
     if (!portfolioLoaded || portfolio.length === 0) return;
-    const missing = portfolio.filter(p => p.id && p.sector == null);
+    // Include 'Unknown' so holdings enriched with the old broken proxy get re-enriched.
+    // metaAttempted ref prevents infinite retries for tickers that are genuinely unknown.
+    const missing = portfolio.filter(p =>
+      p.id && (p.sector == null || p.sector === 'Unknown') && !metaAttempted.current.has(p.id)
+    );
     if (missing.length === 0) return;
+
+    // Mark all as attempted before any async work to avoid duplicate fetches
+    missing.forEach(h => metaAttempted.current.add(h.id));
 
     let cancelled = false;
     setMetaLoading(missing.length);
@@ -1390,7 +1398,15 @@ function App() {
           body: JSON.stringify({ sector, country }),
         }).catch(() => {});
       } catch (e) {
-        if (!cancelled) setPortfolio(prev => prev.map(p => p.id === holding.id ? { ...p, sector: 'Unknown', country: 'Unknown' } : p));
+        if (!cancelled) {
+          setPortfolio(prev => prev.map(p => p.id === holding.id ? { ...p, sector: 'Unknown', country: 'Unknown' } : p));
+          // Persist so we don't retry on every page load
+          fetch(`${PORTFOLIO_API}?_method=PUT&id=${holding.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ sector: 'Unknown', country: 'Unknown' }),
+          }).catch(() => {});
+        }
       } finally {
         if (!cancelled) setMetaLoading(prev => Math.max(0, prev - 1));
       }

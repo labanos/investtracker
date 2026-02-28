@@ -1,19 +1,111 @@
 <?php
-// ─── meta.php — server-side proxy for Yahoo Finance quoteSummary ────────────
+// ─── meta.php — sector/country metadata for holdings ────────────────────────
+// Strategy: 1) static known-ticker map (instant, no external calls)
+//           2) ticker-suffix inference for country
+//           3) Yahoo Finance curl as last-resort fallback
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
-$ticker = trim($_GET['ticker'] ?? '');
+$ticker = strtoupper(trim($_GET['ticker'] ?? ''));
 if (!$ticker || !preg_match('/^[A-Za-z0-9.\-=\^]+$/', $ticker)) {
     http_response_code(400); echo json_encode(['error' => 'invalid ticker']); exit;
 }
 
-$debug = isset($_GET['debug']);
+// ── 1. Static map — covers all commonly imported tickers ─────────────────────
+// [sector, industry, country]
+$STATIC = [
+    // ── Technology – Semiconductors ───────────────────────────────────────────
+    'NVDA'     => ['Technology', 'Semiconductors',             'United States'],
+    'AMD'      => ['Technology', 'Semiconductors',             'United States'],
+    'INTC'     => ['Technology', 'Semiconductors',             'United States'],
+    'QCOM'     => ['Technology', 'Semiconductors',             'United States'],
+    'AVGO'     => ['Technology', 'Semiconductors',             'United States'],
+    'LSCC'     => ['Technology', 'Semiconductors',             'United States'],
+    'MRVL'     => ['Technology', 'Semiconductors',             'United States'],
+    'ON'       => ['Technology', 'Semiconductors',             'United States'],
+    'TXN'      => ['Technology', 'Semiconductors',             'United States'],
+    'TSM'      => ['Technology', 'Semiconductors',             'Taiwan'],
+    'ASML'     => ['Technology', 'Semiconductor Equipment',    'Netherlands'],
+    'BESI.AS'  => ['Technology', 'Semiconductor Equipment',    'Netherlands'],
+    'SMCI'     => ['Technology', 'Computer Hardware',          'United States'],
+    // ── Technology – Software ─────────────────────────────────────────────────
+    'MSFT'     => ['Technology', 'Software-Infrastructure',    'United States'],
+    'AAPL'     => ['Technology', 'Consumer Electronics',       'United States'],
+    'GOOGL'    => ['Communication Services', 'Internet Content & Information', 'United States'],
+    'GOOG'     => ['Communication Services', 'Internet Content & Information', 'United States'],
+    'META'     => ['Communication Services', 'Internet Content & Information', 'United States'],
+    'SNOW'     => ['Technology', 'Software-Application',       'United States'],
+    'U'        => ['Technology', 'Software-Application',       'United States'],
+    'CRM'      => ['Technology', 'Software-Application',       'United States'],
+    'NOW'      => ['Technology', 'Software-Application',       'United States'],
+    'PLTR'     => ['Technology', 'Software-Application',       'United States'],
+    'PANW'     => ['Technology', 'Software-Infrastructure',    'United States'],
+    'ZS'       => ['Technology', 'Software-Infrastructure',    'United States'],
+    'DDOG'     => ['Technology', 'Software-Application',       'United States'],
+    'HUBS'     => ['Technology', 'Software-Application',       'United States'],
+    'ADBE'     => ['Technology', 'Software-Application',       'United States'],
+    'ORCL'     => ['Technology', 'Software-Infrastructure',    'United States'],
+    'SAP'      => ['Technology', 'Software-Application',       'Germany'],
+    // ── Technology – Internet / E-commerce ───────────────────────────────────
+    'AMZN'     => ['Consumer Cyclical', 'Internet Retail',     'United States'],
+    'MELI'     => ['Consumer Cyclical', 'Internet Retail',     'Argentina'],
+    'SE'       => ['Consumer Cyclical', 'Internet Retail',     'Singapore'],
+    // ── Communication Services ────────────────────────────────────────────────
+    'NFLX'     => ['Communication Services', 'Entertainment',  'United States'],
+    'DIS'      => ['Communication Services', 'Entertainment',  'United States'],
+    // ── Healthcare ────────────────────────────────────────────────────────────
+    'NOVO-B.CO'=> ['Healthcare', 'Drug Manufacturers-General', 'Denmark'],
+    'NVO'      => ['Healthcare', 'Drug Manufacturers-General', 'Denmark'],
+    'LLY'      => ['Healthcare', 'Drug Manufacturers-General', 'United States'],
+    'JNJ'      => ['Healthcare', 'Drug Manufacturers-General', 'United States'],
+    'ABBV'     => ['Healthcare', 'Drug Manufacturers-General', 'United States'],
+    // ── Financials ────────────────────────────────────────────────────────────
+    'V'        => ['Financial Services', 'Credit Services',    'United States'],
+    'MA'       => ['Financial Services', 'Credit Services',    'United States'],
+    'JPM'      => ['Financial Services', 'Banks-Diversified',  'United States'],
+    'BRK-B'    => ['Financial Services', 'Insurance-Diversified', 'United States'],
+    // ── Energy / Industrials ──────────────────────────────────────────────────
+    'TSLA'     => ['Consumer Cyclical', 'Auto Manufacturers',  'United States'],
+];
 
-function yf_fetch($url) {
+if (isset($STATIC[$ticker])) {
+    [$sector, $industry, $country] = $STATIC[$ticker];
+    echo json_encode(compact('sector', 'industry', 'country'));
+    exit;
+}
+
+// ── 2. Country inference from ticker exchange suffix ─────────────────────────
+function infer_country(string $ticker): ?string {
+    if (str_contains($ticker, '.CO'))  return 'Denmark';
+    if (str_contains($ticker, '.AS'))  return 'Netherlands';
+    if (str_contains($ticker, '.ST'))  return 'Sweden';
+    if (str_contains($ticker, '.HE'))  return 'Finland';
+    if (str_contains($ticker, '.OL'))  return 'Norway';
+    if (str_contains($ticker, '.L'))   return 'United Kingdom';
+    if (str_contains($ticker, '.PA'))  return 'France';
+    if (str_contains($ticker, '.DE') || str_contains($ticker, '.F')) return 'Germany';
+    if (str_contains($ticker, '.MI'))  return 'Italy';
+    if (str_contains($ticker, '.MC'))  return 'Spain';
+    if (str_contains($ticker, '.SW'))  return 'Switzerland';
+    if (str_contains($ticker, '.AX'))  return 'Australia';
+    if (str_contains($ticker, '.T'))   return 'Japan';
+    if (str_contains($ticker, '.HK'))  return 'Hong Kong';
+    if (str_contains($ticker, '.SS') || str_contains($ticker, '.SZ')) return 'China';
+    if (str_contains($ticker, '.KS') || str_contains($ticker, '.KQ')) return 'South Korea';
+    if (str_contains($ticker, '.TW') || str_contains($ticker, '.TWO')) return 'Taiwan';
+    if (str_contains($ticker, '.NS') || str_contains($ticker, '.BO'))  return 'India';
+    if (str_contains($ticker, '.SA'))  return 'Brazil';
+    if (str_contains($ticker, '.MX'))  return 'Mexico';
+    if (str_contains($ticker, '.TO') || str_contains($ticker, '.V'))   return 'Canada';
+    // No recognised suffix → assume US
+    return null;
+}
+
+// ── 3. Yahoo Finance curl fallback ───────────────────────────────────────────
+function yf_fetch(string $url): array {
     if (!function_exists('curl_init')) {
         return ['ok' => false, 'code' => 0, 'error' => 'curl not available', 'body' => null];
     }
@@ -41,18 +133,6 @@ function yf_fetch($url) {
 $yfUrl  = "https://query2.finance.yahoo.com/v1/finance/quoteSummary/" . urlencode($ticker) . "?modules=assetProfile";
 $result = yf_fetch($yfUrl);
 
-if ($debug) {
-    echo json_encode([
-        'curl_available'  => function_exists('curl_init'),
-        'allow_url_fopen' => ini_get('allow_url_fopen'),
-        'url'    => $yfUrl,
-        'code'   => $result['code'],
-        'error'  => $result['error'],
-        'body'   => $result['body'] ? substr($result['body'], 0, 400) : null,
-    ], JSON_PRETTY_PRINT);
-    exit;
-}
-
 if ($result['ok']) {
     $data    = json_decode($result['body'], true);
     $profile = $data['quoteSummary']['result'][0]['assetProfile'] ?? null;
@@ -66,5 +146,17 @@ if ($result['ok']) {
     }
 }
 
+// ── 4. Best-effort response from suffix inference ─────────────────────────────
+$inferredCountry = infer_country($ticker);
+if ($inferredCountry) {
+    echo json_encode([
+        'sector'   => null,
+        'industry' => null,
+        'country'  => $inferredCountry,
+    ]);
+    exit;
+}
+
+// ── 5. Give up ────────────────────────────────────────────────────────────────
 http_response_code(502);
-echo json_encode(['error' => 'upstream fetch failed', 'code' => $result['code'], 'curlError' => $result['error']]);
+echo json_encode(['error' => 'metadata unavailable', 'ticker' => $ticker, 'yfCode' => $result['code']]);
