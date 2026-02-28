@@ -1185,7 +1185,7 @@ function App() {
         setPortfolio(SEED_PORTFOLIO);
         setPortfolioLoaded(true);
       });
-  }, []);
+  }, [portfolioId]);
 
   // Keep ref in sync whenever portfolio state changes
   useEffect(() => { if (portfolio.length > 0) portfolioRef.current = portfolio; }, [portfolio]);
