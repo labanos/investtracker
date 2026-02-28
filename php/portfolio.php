@@ -32,6 +32,9 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS portfolio (
     created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 )");
 
+require_once __DIR__ . '/db_migrate.php';
+run_migrations($pdo);
+
 // ─── Method override (DELETE/PUT tunnelled via POST) ─────────────────────
 $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'POST' && isset($_GET['_method'])) {
@@ -39,11 +42,14 @@ if ($method === 'POST' && isset($_GET['_method'])) {
     if (in_array($override, ['PUT', 'DELETE'])) $method = $override;
 }
 
-// ─── GET — return all portfolio items ────────────────────────────────────
+// ─── GET — return all portfolio items for a portfolio ────────────────────
 if ($method === 'GET') {
-    $stmt = $pdo->query(
-        "SELECT id, ticker, yh_ticker, company, ccy FROM portfolio ORDER BY created_at ASC"
+    $pfId = (int)($_GET['portfolio_id'] ?? 0);
+    if (!$pfId) { http_response_code(400); echo json_encode(['error' => 'portfolio_id required']); exit; }
+    $stmt = $pdo->prepare(
+        "SELECT id, ticker, yh_ticker, company, ccy FROM portfolio WHERE portfolio_id = ? ORDER BY created_at ASC"
     );
+    $stmt->execute([$pfId]);
     echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
     exit;
 }
@@ -52,16 +58,20 @@ if ($method === 'GET') {
 if ($method === 'POST' && isset($_GET['batch'])) {
     $items = json_decode(file_get_contents('php://input'), true);
     if (!is_array($items)) { http_response_code(400); echo json_encode(['error' => 'Expected array']); exit; }
+    $pfId = (int)($_GET['portfolio_id'] ?? ($items[0]['portfolio_id'] ?? 0));
+    if (!$pfId) { http_response_code(400); echo json_encode(['error' => 'portfolio_id required']); exit; }
     $stmt = $pdo->prepare(
-        "INSERT IGNORE INTO portfolio (ticker, yh_ticker, company, ccy) VALUES (?,?,?,?)"
+        "INSERT IGNORE INTO portfolio (portfolio_id, ticker, yh_ticker, company, ccy) VALUES (?,?,?,?,?)"
     );
     foreach ($items as $item) {
         $yhTicker = $item['yhTicker'] ?? $item['yh_ticker'] ?? $item['ticker'];
-        $stmt->execute([$item['ticker'], $yhTicker, $item['company'], $item['ccy']]);
+        $stmt->execute([$pfId, $item['ticker'], $yhTicker, $item['company'], $item['ccy']]);
     }
-    $all = $pdo->query(
-        "SELECT id, ticker, yh_ticker, company, ccy FROM portfolio ORDER BY created_at ASC"
-    )->fetchAll(PDO::FETCH_ASSOC);
+    $all = $pdo->prepare(
+        "SELECT id, ticker, yh_ticker, company, ccy FROM portfolio WHERE portfolio_id = ? ORDER BY created_at ASC"
+    );
+    $all->execute([$pfId]);
+    $all = $all->fetchAll(PDO::FETCH_ASSOC);
     echo json_encode($all);
     exit;
 }
@@ -69,27 +79,28 @@ if ($method === 'POST' && isset($_GET['batch'])) {
 // ─── POST — create single portfolio entry ─────────────────────────────────
 if ($method === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
+    $pfId     = (int)($data['portfolio_id'] ?? ($_GET['portfolio_id'] ?? 0));
     $ticker   = strtoupper(trim($data['ticker']   ?? ''));
     $yhTicker = trim($data['yhTicker'] ?? $data['yh_ticker'] ?? $ticker);
     $company  = trim($data['company']  ?? '');
     $ccy      = strtoupper(trim($data['ccy'] ?? 'USD'));
-    if (!$ticker || !$company) {
-        http_response_code(400); echo json_encode(['error' => 'ticker and company are required']); exit;
+    if (!$pfId || !$ticker || !$company) {
+        http_response_code(400); echo json_encode(['error' => 'portfolio_id, ticker and company are required']); exit;
     }
     try {
         $stmt = $pdo->prepare(
-            "INSERT INTO portfolio (ticker, yh_ticker, company, ccy) VALUES (?,?,?,?)"
+            "INSERT INTO portfolio (portfolio_id, ticker, yh_ticker, company, ccy) VALUES (?,?,?,?,?)"
         );
-        $stmt->execute([$ticker, $yhTicker, $company, $ccy]);
+        $stmt->execute([$pfId, $ticker, $yhTicker, $company, $ccy]);
         $id = (int)$pdo->lastInsertId();
         echo json_encode([
-            'id' => $id, 'ticker' => $ticker,
+            'id' => $id, 'portfolio_id' => $pfId, 'ticker' => $ticker,
             'yh_ticker' => $yhTicker, 'company' => $company, 'ccy' => $ccy
         ]);
     } catch (PDOException $e) {
         if ($e->getCode() === '23000') {
             http_response_code(409);
-            echo json_encode(['error' => "Ticker '$ticker' already exists in portfolio"]);
+            echo json_encode(['error' => "Ticker '$ticker' already exists in this portfolio"]);
         } else {
             http_response_code(500);
             echo json_encode(['error' => 'Could not create entry']);

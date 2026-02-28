@@ -63,6 +63,7 @@ const NOTES_API        = 'https://labanos.dk/notes.php';
 const TRANSACTIONS_API = 'https://labanos.dk/transactions.php';
 const PORTFOLIO_API    = 'https://labanos.dk/portfolio.php';
 const AUTH_API         = 'https://labanos.dk/auth.php';
+const PORTFOLIOS_API   = 'https://labanos.dk/portfolios.php';
 
 // Returns fetch headers including auth token if logged in
 const authHeaders = () => {
@@ -366,6 +367,104 @@ function NoteForm({ form, onChange, onSave, onCancel, saving, error, textareaRef
 }
 
 // ─── AddHoldingModal ───────────────────────────────────────────────────────
+// ─── Portfolio Switcher ────────────────────────────────────────────────────
+function PortfolioSwitcher({ portfolios, portfolioId, onSwitch, onCreateNew, user }) {
+  const [showMenu,   setShowMenu]   = React.useState(false);
+  const [creating,   setCreating]   = React.useState(false);
+  const [renaming,   setRenaming]   = React.useState(null); // portfolio object
+  const [newName,    setNewName]    = React.useState('');
+  const [saving,     setSaving]     = React.useState(false);
+  const current = portfolios.find(p => p.id === portfolioId);
+
+  const createPortfolio = async () => {
+    if (!newName.trim()) return;
+    setSaving(true);
+    const token = localStorage.getItem('auth_token');
+    const res = await fetch(PORTFOLIOS_API, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ name: newName.trim() }),
+    });
+    if (res.ok) {
+      const pf = await res.json();
+      onCreateNew(pf);
+      setNewName(''); setCreating(false);
+    }
+    setSaving(false);
+  };
+
+  const renamePortfolio = async () => {
+    if (!newName.trim() || !renaming) return;
+    setSaving(true);
+    const res = await fetch(`${PORTFOLIOS_API}?id=${renaming.id}&_method=PUT`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ name: newName.trim() }),
+    });
+    if (res.ok) { onCreateNew({ ...renaming, name: newName.trim(), _rename: true }); setRenaming(null); setNewName(''); }
+    setSaving(false);
+  };
+
+  const deletePortfolio = async (pf) => {
+    if (!window.confirm(`Delete "${pf.name}"? This only works if the portfolio has no holdings.`)) return;
+    const res = await fetch(`${PORTFOLIOS_API}?id=${pf.id}&_method=DELETE`, { method: 'POST', headers: authHeaders() });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Could not delete'); return; }
+    onCreateNew({ ...pf, _deleted: true });
+  };
+
+  if (creating || renaming) {
+    return (
+      <div className="flex items-center gap-1">
+        <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') creating ? createPortfolio() : renamePortfolio(); if (e.key === 'Escape') { setCreating(false); setRenaming(null); } }}
+          placeholder={creating ? 'Portfolio name…' : renaming?.name}
+          className="bg-gray-800 text-white text-[12px] rounded-lg px-2 py-1 outline-none border border-gray-600 w-36" />
+        <button onClick={creating ? createPortfolio : renamePortfolio} disabled={saving}
+          className="text-[11px] bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded-lg text-white disabled:opacity-50">
+          {saving ? '…' : 'Save'}
+        </button>
+        <button onClick={() => { setCreating(false); setRenaming(null); }} className="text-gray-400 hover:text-white text-[11px] px-1">✕</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <button onClick={() => setShowMenu(m => !m)}
+        className="flex items-center gap-1 text-[12px] text-gray-200 hover:text-white bg-gray-800 hover:bg-gray-700 px-2.5 py-1 rounded-lg transition-colors max-w-[120px]">
+        <span className="truncate">{current?.name || 'Portfolio'}</span>
+        <span className="text-gray-400 text-[10px]">▾</span>
+      </button>
+      {showMenu && (
+        <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 z-50 min-w-[180px] py-1 overflow-hidden">
+          {portfolios.map(pf => (
+            <div key={pf.id} className={`flex items-center justify-between px-3 py-2 hover:bg-gray-50 ${pf.id === portfolioId ? 'bg-blue-50' : ''}`}>
+              <button onClick={() => { onSwitch(pf.id); setShowMenu(false); }}
+                className={`flex-1 text-left text-[13px] ${pf.id === portfolioId ? 'font-semibold text-blue-700' : 'text-gray-700'}`}>
+                {pf.name}
+                {pf.id === portfolioId && <span className="ml-1 text-[10px]">✓</span>}
+              </button>
+              {user && portfolios.length > 1 && (
+                <div className="flex gap-0.5 ml-1">
+                  <button onClick={() => { setRenaming(pf); setNewName(pf.name); setShowMenu(false); }}
+                    className="text-gray-300 hover:text-blue-500 text-[12px] px-1">✎</button>
+                  <button onClick={() => { deletePortfolio(pf); setShowMenu(false); }}
+                    className="text-gray-300 hover:text-red-500 text-[12px] px-1">✕</button>
+                </div>
+              )}
+            </div>
+          ))}
+          {user && (
+            <button onClick={() => { setCreating(true); setNewName(''); setShowMenu(false); }}
+              className="w-full text-left px-3 py-2 text-[12px] text-blue-600 hover:bg-blue-50 border-t border-gray-100 font-medium">
+              + New portfolio
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Login Modal ───────────────────────────────────────────────────────────
 function LoginModal({ onLogin, onClose }) {
   const [email,    setEmail]    = useState('');
@@ -475,7 +574,7 @@ function SetupModal({ onComplete }) {
   );
 }
 
-function AddHoldingModal({ onClose, onAdded }) {
+function AddHoldingModal({ onClose, onAdded, portfolioId }) {
   const today = new Date().toISOString().split('T')[0];
   const [form, setForm] = useState({
     ticker: '', yhTicker: '', company: '', ccy: 'USD',
@@ -499,6 +598,7 @@ function AddHoldingModal({ onClose, onAdded }) {
         body: JSON.stringify({
           ticker, company: form.company.trim(),
           yhTicker: form.yhTicker.trim() || ticker, ccy: form.ccy,
+          portfolio_id: portfolioId,
         }),
       });
       if (!portRes.ok) {
@@ -512,6 +612,7 @@ function AddHoldingModal({ onClose, onAdded }) {
         method: 'POST', headers: authHeaders(),
         body: JSON.stringify({
           ticker, date: form.date, type: form.type,
+          portfolio_id: portfolioId,
           shares: parseFloat(form.shares), price: parseFloat(form.price),
           fees: parseFloat(form.fees) || 0, note: form.note.trim(),
         }),
@@ -629,7 +730,7 @@ function AddHoldingModal({ onClose, onAdded }) {
 }
 
 // ─── Detail Page ───────────────────────────────────────────────────────────
-function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveHolding, user, onRequireLogin, isLive, lastUpdated }) {
+function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveHolding, user, onRequireLogin, portfolioId, isLive, lastUpdated }) {
 
   // ── Transactions state ──────────────────────────────────────────────────
   const [txns,         setTxns]        = useState(initialTxns || []);
@@ -659,13 +760,14 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
     if (!txnForm.shares || !txnForm.price) return;
     setSavingTxn(true); setTxnError(null);
     const payload = {
-      ticker: p.ticker,
-      date:   txnForm.date,
-      type:   txnForm.type,
-      shares: parseFloat(txnForm.shares),
-      price:  parseFloat(txnForm.price),
-      fees:   parseFloat(txnForm.fees  || 0),
-      note:   txnForm.note.trim(),
+      ticker:       p.ticker,
+      portfolio_id: portfolioId,
+      date:         txnForm.date,
+      type:         txnForm.type,
+      shares:       parseFloat(txnForm.shares),
+      price:        parseFloat(txnForm.price),
+      fees:         parseFloat(txnForm.fees  || 0),
+      note:         txnForm.note.trim(),
     };
     try {
       if (addingTxn) {
@@ -712,7 +814,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
 
   useEffect(() => {
     setNotesReady(false);
-    fetch(`${NOTES_API}?ticker=${encodeURIComponent(p.ticker)}`)
+    fetch(`${NOTES_API}?ticker=${encodeURIComponent(p.ticker)}&portfolio_id=${portfolioId}`)
       .then(r => r.ok ? r.json() : [])
       .then(data => { setNotes(Array.isArray(data) ? data : []); setNotesReady(true); })
       .catch(()  => { setNotes([]); setNotesReady(true); });
@@ -743,7 +845,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
         const res = await fetch(NOTES_API, {
           method: 'POST',
           headers: authHeaders(),
-          body: JSON.stringify({ ticker: p.ticker, date: noteForm.date, text: noteForm.text.trim() }),
+          body: JSON.stringify({ ticker: p.ticker, portfolio_id: portfolioId, date: noteForm.date, text: noteForm.text.trim() }),
         });
         if (!res.ok) throw new Error();
         const created = await res.json();
@@ -1034,6 +1136,11 @@ function App() {
   const [showClosed,  setShowClosed]  = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
+  // ── Portfolios state ──
+  const [portfolios,    setPortfolios]    = useState([]);
+  const [portfolioId,   setPortfolioId]   = useState(null); // currently selected portfolio id
+  const [pfListLoaded,  setPfListLoaded]  = useState(false);
+
   // ── Auth state ──
   const [user,         setUser]         = useState(null);   // null = not logged in
   const [authChecked,  setAuthChecked]  = useState(false);  // prevents flash
@@ -1047,13 +1154,14 @@ function App() {
   const [portfolioLoaded, setPortfolioLoaded] = useState(false);
 
   useEffect(() => {
-    fetch(PORTFOLIO_API)
+    if (!portfolioId) return;
+    fetch(`${PORTFOLIO_API}?portfolio_id=${portfolioId}`)
       .then(r => r.ok ? r.json() : [])
       .then(async rows => {
         if (rows.length === 0) {
           // First ever load — seed from SEED_PORTFOLIO
-          const res = await fetch(`${PORTFOLIO_API}?batch=1`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+          const res = await fetch(`${PORTFOLIO_API}?batch=1&portfolio_id=${portfolioId}`, {
+            method: 'POST', headers: authHeaders(),
             body: JSON.stringify(SEED_PORTFOLIO),
           });
           if (res.ok) {
@@ -1082,6 +1190,22 @@ function App() {
   // Keep ref in sync whenever portfolio state changes
   useEffect(() => { if (portfolio.length > 0) portfolioRef.current = portfolio; }, [portfolio]);
 
+  // ── Load portfolio list on mount (public — no auth required) ──
+  useEffect(() => {
+    fetch(PORTFOLIOS_API)
+      .then(r => r.ok ? r.json() : [])
+      .then(pfs => {
+        if (pfs.length > 0) {
+          setPortfolios(pfs);
+          const saved = parseInt(localStorage.getItem('selected_portfolio_id'));
+          const found = pfs.find(p => p.id === saved);
+          setPortfolioId(found ? found.id : pfs[0].id);
+        }
+        setPfListLoaded(true);
+      })
+      .catch(() => setPfListLoaded(true));
+  }, []);
+
   // ── Auth: check setup + restore session on mount ──
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -1104,6 +1228,36 @@ function App() {
         setAuthChecked(true);
       })
       .catch(() => setAuthChecked(true));
+  }, []);
+
+  const handlePortfolioAction = useCallback((pf) => {
+    if (pf._deleted) {
+      setPortfolios(prev => {
+        const next = prev.filter(p => p.id !== pf.id);
+        if (portfolioId === pf.id && next.length > 0) switchPortfolio(next[0].id);
+        return next;
+      });
+    } else if (pf._rename) {
+      setPortfolios(prev => prev.map(p => p.id === pf.id ? { ...p, name: pf.name } : p));
+    } else {
+      // new portfolio created
+      setPortfolios(prev => [...prev, pf]);
+      switchPortfolio(pf.id);
+    }
+  }, [portfolioId]);
+
+  const switchPortfolio = useCallback((id) => {
+    setPortfolioId(id);
+    localStorage.setItem('selected_portfolio_id', id);
+    // Reset all portfolio-scoped state so it reloads for the new portfolio
+    setPortfolio([]);
+    setPortfolioLoaded(false);
+    setAllTxns({});
+    setTxnsLoaded(false);
+    setPrices({});
+    setIsLive(false);
+    setSelectedTicker(null);
+    portfolioRef.current = SEED_PORTFOLIO;
   }, []);
 
   const requireLogin = useCallback((action) => {
@@ -1141,7 +1295,8 @@ function App() {
   const [txnsLoaded, setTxnsLoaded] = useState(false);
 
   useEffect(() => {
-    fetch(TRANSACTIONS_API)
+    if (!portfolioId) return;
+    fetch(`${TRANSACTIONS_API}?portfolio_id=${portfolioId}`)
       .then(r => r.ok ? r.json() : [])
       .then(async rows => {
         // Group by ticker
@@ -1176,7 +1331,7 @@ function App() {
         setAllTxns(grouped);
         setTxnsLoaded(true);
       });
-  }, []);
+  }, [portfolioId]);
 
   // Called by DetailPage when it adds/edits/deletes a transaction
   const handleTxnsChanged = useCallback((ticker, updatedTxns) => {
@@ -1321,6 +1476,7 @@ function App() {
         onRemoveHolding={handleRemoveHolding}
         user={user}
         onRequireLogin={requireLogin}
+        portfolioId={portfolioId}
         isLive={isLive}
         lastUpdated={lastUpdated}
       />
@@ -1369,7 +1525,17 @@ function App() {
       {/* ── Header ── */}
       <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-[15px]">Portfolio</span>
+          {pfListLoaded && portfolios.length > 0 ? (
+            <PortfolioSwitcher
+              portfolios={portfolios}
+              portfolioId={portfolioId}
+              onSwitch={switchPortfolio}
+              onCreateNew={handlePortfolioAction}
+              user={user}
+            />
+          ) : (
+            <span className="font-semibold text-[15px]">Portfolio</span>
+          )}
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isLive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-700 text-gray-400'}`}>
             {isLive ? '● live' : '○ cached'}
           </span>
@@ -1413,6 +1579,7 @@ function App() {
           onClose={() => setShowAddModal(false)}
           onAdded={handlePortfolioChanged}
           user={user}
+          portfolioId={portfolioId}
         />
       )}
 

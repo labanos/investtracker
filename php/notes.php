@@ -46,6 +46,9 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 ");
 
+require_once __DIR__ . '/db_migrate.php';
+run_migrations($pdo);
+
 // ─── Route request ───────────────────────────────────────────────────────────
 $method = $_SERVER['REQUEST_METHOD'];
 // Method override: PUT/DELETE tunnelled through POST (?_method=DELETE)

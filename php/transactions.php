@@ -43,6 +43,9 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 ");
 
+require_once __DIR__ . '/db_migrate.php';
+run_migrations($pdo);
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function castRow($r) {
     return [
@@ -78,15 +81,25 @@ switch ($method) {
     // ── GET /transactions.php            → all transactions
     // ── GET /transactions.php?ticker=X  → by ticker
     case 'GET':
-        if ($ticker) {
+        $pfId = (int)($_GET['portfolio_id'] ?? 0);
+        if ($ticker && $pfId) {
             $stmt = $pdo->prepare("
                 SELECT id, ticker, DATE_FORMAT(date,'%Y-%m-%d') AS date,
                        type, shares, price, fees, note
-                FROM transactions WHERE ticker = ?
+                FROM transactions WHERE ticker = ? AND portfolio_id = ?
                 ORDER BY date ASC, id ASC
             ");
-            $stmt->execute([$ticker]);
+            $stmt->execute([$ticker, $pfId]);
+        } elseif ($pfId) {
+            $stmt = $pdo->prepare("
+                SELECT id, ticker, DATE_FORMAT(date,'%Y-%m-%d') AS date,
+                       type, shares, price, fees, note
+                FROM transactions WHERE portfolio_id = ?
+                ORDER BY ticker, date ASC, id ASC
+            ");
+            $stmt->execute([$pfId]);
         } else {
+            // Fallback: return all (used during seed check before portfolio_id is known)
             $stmt = $pdo->query("
                 SELECT id, ticker, DATE_FORMAT(date,'%Y-%m-%d') AS date,
                        type, shares, price, fees, note
@@ -106,14 +119,18 @@ switch ($method) {
             if (!is_array($body) || count($body) === 0) {
                 http_response_code(400); echo json_encode(['error' => 'Expected array']); exit;
             }
+            $defaultPfId = (int)($_GET['portfolio_id'] ?? 0);
             $stmt = $pdo->prepare("
-                INSERT INTO transactions (ticker, date, type, shares, price, fees, note)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO transactions (portfolio_id, ticker, date, type, shares, price, fees, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $pdo->beginTransaction();
             $inserted = 0;
             foreach ($body as $t) {
+                $pfId = (int)($t['portfolio_id'] ?? $defaultPfId);
+                if (!$pfId) continue; // skip rows without portfolio_id
                 $stmt->execute([
+                    $pfId,
                     trim($t['ticker'] ?? ''),
                     trim($t['date']   ?? ''),
                     trim($t['type']   ?? 'buy'),
@@ -128,6 +145,7 @@ switch ($method) {
             echo json_encode(['inserted' => $inserted]);
         } else {
             // Single insert
+            $pfId = (int)($body['portfolio_id'] ?? ($_GET['portfolio_id'] ?? 0));
             $t = trim($body['ticker'] ?? '');
             $d = trim($body['date']   ?? '');
             $y = trim($body['type']   ?? '');
@@ -136,19 +154,19 @@ switch ($method) {
             $f = (float)($body['fees']   ?? 0);
             $n = trim($body['note']   ?? '');
 
-            if (!$t || !$d || !$y || !$s || !$p) {
+            if (!$pfId || !$t || !$d || !$y || !$s || !$p) {
                 http_response_code(400);
-                echo json_encode(['error' => 'ticker, date, type, shares and price are required']);
+                echo json_encode(['error' => 'portfolio_id, ticker, date, type, shares and price are required']);
                 exit;
             }
             $stmt = $pdo->prepare("
-                INSERT INTO transactions (ticker, date, type, shares, price, fees, note)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO transactions (portfolio_id, ticker, date, type, shares, price, fees, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$t, $d, $y, $s, $p, $f, $n]);
+            $stmt->execute([$pfId, $t, $d, $y, $s, $p, $f, $n]);
             $newId = (int)$pdo->lastInsertId();
             http_response_code(201);
-            echo json_encode(['id'=>$newId,'ticker'=>$t,'date'=>$d,'type'=>$y,'shares'=>$s,'price'=>$p,'fees'=>$f,'note'=>$n]);
+            echo json_encode(['id'=>$newId,'portfolio_id'=>$pfId,'ticker'=>$t,'date'=>$d,'type'=>$y,'shares'=>$s,'price'=>$p,'fees'=>$f,'note'=>$n]);
         }
         break;
 
@@ -177,8 +195,14 @@ switch ($method) {
     case 'DELETE':
         require_auth($pdo);
         if ($ticker) {
-            $stmt = $pdo->prepare("DELETE FROM transactions WHERE ticker=?");
-            $stmt->execute([$ticker]);
+            $pfId = (int)($_GET['portfolio_id'] ?? 0);
+            if ($pfId) {
+                $stmt = $pdo->prepare("DELETE FROM transactions WHERE ticker=? AND portfolio_id=?");
+                $stmt->execute([$ticker, $pfId]);
+            } else {
+                $stmt = $pdo->prepare("DELETE FROM transactions WHERE ticker=?");
+                $stmt->execute([$ticker]);
+            }
             echo json_encode(['deleted' => $stmt->rowCount()]);
         } elseif ($id) {
             $pdo->prepare("DELETE FROM transactions WHERE id=?")->execute([$id]);
