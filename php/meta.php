@@ -25,12 +25,23 @@ $STATIC = [
     'AVGO'     => ['Technology', 'Semiconductors',             'United States'],
     'LSCC'     => ['Technology', 'Semiconductors',             'United States'],
     'MRVL'     => ['Technology', 'Semiconductors',             'United States'],
+    'CRDO'     => ['Technology', 'Semiconductors',             'United States'],
+    'MU'       => ['Technology', 'Semiconductors',             'United States'],
+    'CAMT'     => ['Technology', 'Semiconductors',             'Israel'],
     'ON'       => ['Technology', 'Semiconductors',             'United States'],
     'TXN'      => ['Technology', 'Semiconductors',             'United States'],
     'TSM'      => ['Technology', 'Semiconductors',             'Taiwan'],
     'ASML'     => ['Technology', 'Semiconductor Equipment',    'Netherlands'],
+    'ASML.AS'  => ['Technology', 'Semiconductor Equipment',    'Netherlands'],
     'BESI.AS'  => ['Technology', 'Semiconductor Equipment',    'Netherlands'],
+    'LRCX'     => ['Technology', 'Semiconductor Equipment',    'United States'],
     'SMCI'     => ['Technology', 'Computer Hardware',          'United States'],
+    // ── Technology – Electronic Components / Optical ─────────────────────────
+    'COHR'     => ['Technology', 'Electronic Components',      'United States'],
+    'LITE'     => ['Technology', 'Electronic Components',      'United States'],
+    'FN'       => ['Technology', 'Electronic Components',      'United States'],
+    'CIEN'     => ['Technology', 'Communication Equipment',    'United States'],
+    'VRT'      => ['Technology', 'Electronic Components',      'United States'],
     // ── Technology – Software ─────────────────────────────────────────────────
     'MSFT'     => ['Technology', 'Software-Infrastructure',    'United States'],
     'AAPL'     => ['Technology', 'Consumer Electronics',       'United States'],
@@ -49,26 +60,58 @@ $STATIC = [
     'ADBE'     => ['Technology', 'Software-Application',       'United States'],
     'ORCL'     => ['Technology', 'Software-Infrastructure',    'United States'],
     'SAP'      => ['Technology', 'Software-Application',       'Germany'],
+    'SNPS'     => ['Technology', 'Software-Application',       'United States'],
+    'CDNS'     => ['Technology', 'Software-Application',       'United States'],
+    'GTLB'     => ['Technology', 'Software-Application',       'United States'],
+    'NET'      => ['Technology', 'Software-Infrastructure',    'United States'],
+    'UBER'     => ['Technology', 'Software-Application',       'United States'],
+    // ── Technology – Quantum Computing ───────────────────────────────────────
+    'IONQ'     => ['Technology', 'Quantum Computing',          'United States'],
+    'RGTI'     => ['Technology', 'Quantum Computing',          'United States'],
+    'QUBT'     => ['Technology', 'Quantum Computing',          'United States'],
+    'QBTS'     => ['Technology', 'Quantum Computing',          'United States'],
     // ── Technology – Internet / E-commerce ───────────────────────────────────
     'AMZN'     => ['Consumer Cyclical', 'Internet Retail',     'United States'],
     'MELI'     => ['Consumer Cyclical', 'Internet Retail',     'Argentina'],
     'SE'       => ['Consumer Cyclical', 'Internet Retail',     'Singapore'],
+    'BKNG'     => ['Consumer Cyclical', 'Travel Services',     'United States'],
+    'ABNB'     => ['Consumer Cyclical', 'Travel Services',     'United States'],
+    // ── Consumer Cyclical ─────────────────────────────────────────────────────
+    'LULU'     => ['Consumer Cyclical', 'Apparel Retail',      'United States'],
+    'CROX'     => ['Consumer Cyclical', 'Footwear & Accessories', 'United States'],
+    'CPRT'     => ['Consumer Cyclical', 'Auto & Truck Dealerships', 'United States'],
     // ── Communication Services ────────────────────────────────────────────────
     'NFLX'     => ['Communication Services', 'Entertainment',  'United States'],
     'DIS'      => ['Communication Services', 'Entertainment',  'United States'],
+    'RDDT'     => ['Communication Services', 'Internet Content & Information', 'United States'],
+    'UMGNF'    => ['Communication Services', 'Entertainment',  'Netherlands'],
     // ── Healthcare ────────────────────────────────────────────────────────────
     'NOVO-B.CO'=> ['Healthcare', 'Drug Manufacturers-General', 'Denmark'],
     'NVO'      => ['Healthcare', 'Drug Manufacturers-General', 'Denmark'],
+    'GMAB.CO'  => ['Healthcare', 'Biotechnology',              'Denmark'],
     'LLY'      => ['Healthcare', 'Drug Manufacturers-General', 'United States'],
     'JNJ'      => ['Healthcare', 'Drug Manufacturers-General', 'United States'],
     'ABBV'     => ['Healthcare', 'Drug Manufacturers-General', 'United States'],
-    // ── Financials ────────────────────────────────────────────────────────────
+    // ── Financial Services ────────────────────────────────────────────────────
     'V'        => ['Financial Services', 'Credit Services',    'United States'],
     'MA'       => ['Financial Services', 'Credit Services',    'United States'],
     'JPM'      => ['Financial Services', 'Banks-Diversified',  'United States'],
     'BRK-B'    => ['Financial Services', 'Insurance-Diversified', 'United States'],
-    // ── Energy / Industrials ──────────────────────────────────────────────────
+    'NU'       => ['Financial Services', 'Banks-Diversified',  'Brazil'],
+    'EXXRF'    => ['Financial Services', 'Asset Management',   'Netherlands'],
+    'JYSK.CO'  => ['Financial Services', 'Banks-Regional',     'Denmark'],
+    'DANSKE.CO'=> ['Financial Services', 'Banks-Diversified',  'Denmark'],
+    // ── Industrials ───────────────────────────────────────────────────────────
+    'MLI'      => ['Industrials', 'Metal Fabrication',         'United States'],
+    'TDG'      => ['Industrials', 'Aerospace & Defense',       'United States'],
+    'MAERSK-B.CO' => ['Industrials', 'Marine Shipping',        'Denmark'],
+    'ROCK-B.CO'=> ['Industrials', 'Building Products & Equipment', 'Denmark'],
+    'CHG.DE'   => ['Communication Services', 'Internet Content & Information', 'Germany'],
+    // ── Consumer Cyclical – Autos ─────────────────────────────────────────────
     'TSLA'     => ['Consumer Cyclical', 'Auto Manufacturers',  'United States'],
+    // ── ETFs ─────────────────────────────────────────────────────────────────
+    'SCHG'     => ['ETF', 'Large-Cap Growth',                  'United States'],
+    'CSU.TO'   => ['Technology', 'Software-Application',       'Canada'],
 ];
 
 if (isset($STATIC[$ticker])) {
