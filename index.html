@@ -746,7 +746,7 @@ function AddHoldingModal({ onClose, onAdded, portfolioId }) {
 }
 
 // ─── Detail Page ───────────────────────────────────────────────────────────
-function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveHolding, user, onRequireLogin, portfolioId, isLive, lastUpdated }) {
+function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveHolding, user, onRequireLogin, portfolioId, isLive, lastUpdated, baseCcy }) {
 
   // ── Transactions state ──────────────────────────────────────────────────
   const [txns,         setTxns]        = useState(initialTxns || []);
@@ -1508,6 +1508,7 @@ function App() {
         portfolioId={portfolioId}
         isLive={isLive}
         lastUpdated={lastUpdated}
+        baseCcy={baseCcy}
       />
     );
   }
