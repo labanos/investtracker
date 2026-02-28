@@ -11,6 +11,7 @@ on:
       - 'php/auth.php'
       - 'php/auth_check.php'
       - 'php/db_migrate.php'
+      - 'php/.htaccess'
 
 jobs:
   deploy:
@@ -43,6 +44,7 @@ jobs:
           put php/auth.php auth.php
           put php/auth_check.php auth_check.php
           put php/db_migrate.php db_migrate.php
+          put php/.htaccess .htaccess
           SFTP
 
       - name: Done

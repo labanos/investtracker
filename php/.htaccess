@@ -1,0 +1,2 @@
+# Pass Authorization header through to PHP on Apache shared hosting
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1

@@ -46,6 +46,18 @@ if ($method === 'POST' && isset($_GET['_method'])) {
 }
 $body = json_decode(file_get_contents('php://input'), true) ?: [];
 
+// Apache CGI/FastCGI often strips HTTP_AUTHORIZATION — try all fallbacks
+function get_auth_header() {
+    if (!empty($_SERVER['HTTP_AUTHORIZATION']))          return $_SERVER['HTTP_AUTHORIZATION'];
+    if (!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) return $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+    if (function_exists('getallheaders')) {
+        foreach (getallheaders() as $k => $v) {
+            if (strtolower($k) === 'authorization') return $v;
+        }
+    }
+    return '';
+}
+
 switch ($method) {
 
     // ── GET /auth.php                → check current token → {id,name,email} or 401
@@ -56,7 +68,7 @@ switch ($method) {
             echo json_encode(['setupNeeded' => $count === 0]);
             break;
         }
-        $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        $header = get_auth_header();
         if (!preg_match('/^Bearer (.+)$/', $header, $m)) {
             http_response_code(401); echo json_encode(['error' => 'Not authenticated']); exit;
         }
@@ -111,7 +123,7 @@ switch ($method) {
 
     // ── DELETE /auth.php  (via POST?_method=DELETE) → logout, invalidate token
     case 'DELETE':
-        $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        $header = get_auth_header();
         if (preg_match('/^Bearer (.+)$/', $header, $m)) {
             $pdo->prepare("UPDATE users SET api_token = NULL WHERE api_token = ?")->execute([trim($m[1])]);
         }
