@@ -11,6 +11,7 @@ on:
       - 'php/auth.php'
       - 'php/auth_check.php'
       - 'php/db_migrate.php'
+      - 'php/meta.php'
       - 'php/.htaccess'
 
 jobs:
@@ -44,6 +45,7 @@ jobs:
           put php/auth.php auth.php
           put php/auth_check.php auth_check.php
           put php/db_migrate.php db_migrate.php
+          put php/meta.php meta.php
           put php/.htaccess .htaccess
           SFTP
 

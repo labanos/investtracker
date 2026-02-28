@@ -63,6 +63,7 @@ const SEED_PORTFOLIO = [
 const NOTES_API        = 'https://labanos.dk/notes.php';
 const TRANSACTIONS_API = 'https://labanos.dk/transactions.php';
 const PORTFOLIO_API    = 'https://labanos.dk/portfolio.php';
+const META_API         = 'https://labanos.dk/meta.php';
 const AUTH_API         = 'https://labanos.dk/auth.php';
 const PORTFOLIOS_API   = 'https://labanos.dk/portfolios.php';
 
@@ -1370,21 +1371,17 @@ function App() {
 
     missing.forEach(async (holding) => {
       try {
-        const yfUrl = `https://query2.finance.yahoo.com/v1/finance/quoteSummary/${holding.yhTicker}?modules=assetProfile`;
-        let data = null;
-        for (const src of [yfUrl, `https://corsproxy.io/?${encodeURIComponent(yfUrl)}`]) {
-          try {
-            const c = new AbortController();
-            const t = setTimeout(() => c.abort(), 8000);
-            const res = await fetch(src, { signal: c.signal });
-            clearTimeout(t);
-            if (res.ok) { data = await res.json(); break; }
-          } catch (e) { continue; }
-        }
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 10000);
+        let metaJson = null;
+        try {
+          const res = await fetch(`${META_API}?ticker=${encodeURIComponent(holding.yhTicker)}`, { signal: c.signal });
+          clearTimeout(t);
+          if (res.ok) metaJson = await res.json();
+        } catch (e) { clearTimeout(t); }
         if (cancelled) return;
-        const profile = data?.quoteSummary?.result?.[0]?.assetProfile;
-        const sector  = profile?.sector  || 'Unknown';
-        const country = profile?.country || 'Unknown';
+        const sector  = metaJson?.sector  || 'Unknown';
+        const country = metaJson?.country || 'Unknown';
         setPortfolio(prev => prev.map(p => p.id === holding.id ? { ...p, sector, country } : p));
         // Persist to DB so subsequent loads skip this fetch
         fetch(`${PORTFOLIO_API}?_method=PUT&id=${holding.id}`, {
