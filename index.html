@@ -62,6 +62,15 @@ const SEED_PORTFOLIO = [
 const NOTES_API        = 'https://labanos.dk/notes.php';
 const TRANSACTIONS_API = 'https://labanos.dk/transactions.php';
 const PORTFOLIO_API    = 'https://labanos.dk/portfolio.php';
+const AUTH_API         = 'https://labanos.dk/auth.php';
+
+// Returns fetch headers including auth token if logged in
+const authHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  const h = { 'Content-Type': 'application/json' };
+  if (token) h['Authorization'] = `Bearer ${token}`;
+  return h;
+};
 
 // ─── normalizePfRow — DB row → app format ─────────────────────────────────
 const normalizePfRow = (row) => {
@@ -357,6 +366,115 @@ function NoteForm({ form, onChange, onSave, onCancel, saving, error, textareaRef
 }
 
 // ─── AddHoldingModal ───────────────────────────────────────────────────────
+// ─── Login Modal ───────────────────────────────────────────────────────────
+function LoginModal({ onLogin, onClose }) {
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
+  const [error,    setError]    = useState(null);
+  const [loading,  setLoading]  = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setLoading(true); setError(null);
+    try {
+      const res  = await fetch(AUTH_API, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Login failed'); setLoading(false); return; }
+      onLogin(data);
+    } catch (_) { setError('Could not connect — check your connection.'); setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl px-6 pt-5 pb-8">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="font-bold text-gray-900 text-[16px]">Sign in to edit</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl px-1">✕</button>
+        </div>
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-[11px] text-gray-400 uppercase tracking-wide mb-1">Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="you@example.com" />
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-400 uppercase tracking-wide mb-1">Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          {error && <p className="text-red-500 text-[12px] bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <button type="submit" disabled={loading}
+            className="w-full bg-gray-900 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl text-[14px] disabled:opacity-50 transition-colors">
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── First-Time Setup Modal ─────────────────────────────────────────────────
+function SetupModal({ onComplete }) {
+  const [name,     setName]     = useState('');
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
+  const [error,    setError]    = useState(null);
+  const [loading,  setLoading]  = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setLoading(true); setError(null);
+    try {
+      const res  = await fetch(`${AUTH_API}?setup=1`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Setup failed'); setLoading(false); return; }
+      onComplete(data);
+    } catch (_) { setError('Could not connect — check your connection.'); setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/80">
+      <div className="relative bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl px-6 pt-5 pb-8">
+        <h2 className="font-bold text-gray-900 text-[16px] mb-1">Create your account</h2>
+        <p className="text-[12px] text-gray-400 mb-5">First-time setup — only runs once.</p>
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-[11px] text-gray-400 uppercase tracking-wide mb-1">Your name</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} required autoFocus
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Peter" />
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-400 uppercase tracking-wide mb-1">Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="you@example.com" />
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-400 uppercase tracking-wide mb-1">Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="At least 6 characters" />
+          </div>
+          {error && <p className="text-red-500 text-[12px] bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <button type="submit" disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl text-[14px] disabled:opacity-50 transition-colors">
+            {loading ? 'Creating account…' : 'Create account'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function AddHoldingModal({ onClose, onAdded }) {
   const today = new Date().toISOString().split('T')[0];
   const [form, setForm] = useState({
@@ -377,7 +495,7 @@ function AddHoldingModal({ onClose, onAdded }) {
     try {
       // 1. Create portfolio entry
       const portRes = await fetch(PORTFOLIO_API, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: authHeaders(),
         body: JSON.stringify({
           ticker, company: form.company.trim(),
           yhTicker: form.yhTicker.trim() || ticker, ccy: form.ccy,
@@ -391,7 +509,7 @@ function AddHoldingModal({ onClose, onAdded }) {
 
       // 2. Create opening transaction
       const txnRes = await fetch(TRANSACTIONS_API, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: authHeaders(),
         body: JSON.stringify({
           ticker, date: form.date, type: form.type,
           shares: parseFloat(form.shares), price: parseFloat(form.price),
@@ -552,7 +670,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
     try {
       if (addingTxn) {
         const res = await fetch(TRANSACTIONS_API, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: authHeaders(),
           body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error();
@@ -561,7 +679,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
         setTxns(next); onTxnsChanged(p.ticker, next);
       } else {
         const res = await fetch(`${TRANSACTIONS_API}?id=${editingTxnId}&_method=PUT`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: authHeaders(),
           body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error();
@@ -624,7 +742,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
       if (addingNote) {
         const res = await fetch(NOTES_API, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
           body: JSON.stringify({ ticker: p.ticker, date: noteForm.date, text: noteForm.text.trim() }),
         });
         if (!res.ok) throw new Error();
@@ -633,7 +751,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
       } else {
         const res = await fetch(`${NOTES_API}?id=${editingId}&_method=PUT`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
           body: JSON.stringify({ date: noteForm.date, text: noteForm.text.trim() }),
         });
         if (!res.ok) throw new Error();
@@ -734,7 +852,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-[13px] font-semibold text-gray-600 uppercase tracking-wide">Transactions</h2>
           {!addingTxn && (
-            <button onClick={openAddTxn}
+            <button onClick={() => user ? openAddTxn() : onRequireLogin(openAddTxn)}
               className="text-[12px] text-blue-500 hover:text-blue-600 font-medium px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors">
               + Add
             </button>
@@ -750,7 +868,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
         {txns.length === 0 && !addingTxn ? (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-6 text-center text-gray-400 text-sm">
             No transactions yet —{' '}
-            <button onClick={openAddTxn} className="text-blue-400 font-medium hover:underline">add one</button>
+            <button onClick={() => user ? openAddTxn() : onRequireLogin(openAddTxn)} className="text-blue-400 font-medium hover:underline">add one</button>
           </div>
         ) : txns.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -791,9 +909,9 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
                       </td>
                       <td className="px-3 py-2 text-gray-500 max-w-[140px] truncate">{t.note||''}</td>
                       <td className="px-2 py-2 whitespace-nowrap">
-                        <button onClick={() => openEditTxn(t)} title="Edit"
+                        <button onClick={() => user ? openEditTxn(t) : onRequireLogin(() => openEditTxn(t))} title="Edit"
                           className="text-gray-300 hover:text-blue-400 transition-colors text-[13px] px-1">✎</button>
-                        <button onClick={() => deleteTxn(t.id)} title="Delete"
+                        <button onClick={() => user ? deleteTxn(t.id) : onRequireLogin(() => deleteTxn(t.id))} title="Delete"
                           className="text-gray-300 hover:text-red-400 transition-colors text-[13px] px-1">✕</button>
                       </td>
                     </tr>
@@ -822,7 +940,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-[13px] font-semibold text-gray-600 uppercase tracking-wide">Notes & Diary</h2>
           {!addingNote && (
-            <button onClick={openAdd}
+            <button onClick={() => user ? openAdd() : onRequireLogin(openAdd)}
               className="text-[12px] text-blue-500 hover:text-blue-600 font-medium px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors">
               + Add note
             </button>
@@ -848,7 +966,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
         ) : notes.length === 0 && !addingNote ? (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-6 text-center text-gray-400 text-sm">
             No notes yet —{' '}
-            <button onClick={openAdd} className="text-blue-400 font-medium hover:underline">
+            <button onClick={() => user ? openAdd() : onRequireLogin(openAdd)} className="text-blue-400 font-medium hover:underline">
               add one
             </button>
           </div>
@@ -870,9 +988,9 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
                   <div className="flex items-start justify-between gap-2">
                     <div className="text-[11px] text-gray-400 mono">{fmtDate(note.date)}</div>
                     <div className="flex gap-1 shrink-0 -mt-0.5">
-                      <button onClick={() => openEdit(note)} title="Edit"
+                      <button onClick={() => user ? openEdit(note) : onRequireLogin(() => openEdit(note))} title="Edit"
                         className="text-gray-300 hover:text-blue-400 transition-colors text-[14px] px-1 leading-none">✎</button>
-                      <button onClick={() => deleteNote(note.id)} title="Delete"
+                      <button onClick={() => user ? deleteNote(note.id) : onRequireLogin(() => deleteNote(note.id))} title="Delete"
                         className="text-gray-300 hover:text-red-400 transition-colors text-[14px] px-1 leading-none">✕</button>
                     </div>
                   </div>
@@ -887,7 +1005,7 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
       {/* ── Remove holding ── */}
       <div className="px-4 pt-6 pb-2">
         <button
-          onClick={removeHolding}
+          onClick={() => user ? removeHolding() : onRequireLogin(removeHolding)}
           disabled={removing}
           className="text-[12px] text-red-400 hover:text-red-600 transition-colors disabled:opacity-40"
         >
@@ -913,6 +1031,13 @@ function App() {
   const [selectedTicker, setSelectedTicker] = useState(null);
   const [showClosed,  setShowClosed]  = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+
+  // ── Auth state ──
+  const [user,         setUser]         = useState(null);   // null = not logged in
+  const [authChecked,  setAuthChecked]  = useState(false);  // prevents flash
+  const [setupNeeded,  setSetupNeeded]  = useState(false);
+  const [showLogin,    setShowLogin]    = useState(false);
+  const [pendingAction, setPendingAction] = useState(null); // action to run after login
 
   // ── Portfolio from DB ─────────────────────────────────────────────────
   const portfolioRef = React.useRef(SEED_PORTFOLIO); // used inside fetchPrices
@@ -954,6 +1079,59 @@ function App() {
 
   // Keep ref in sync whenever portfolio state changes
   useEffect(() => { if (portfolio.length > 0) portfolioRef.current = portfolio; }, [portfolio]);
+
+  // ── Auth: check setup + restore session on mount ──
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    // Always check setup status first
+    fetch(`${AUTH_API}?setup_check=1`)
+      .then(r => r.ok ? r.json() : { setupNeeded: false })
+      .then(data => {
+        if (data.setupNeeded) {
+          setSetupNeeded(true);
+          setAuthChecked(true);
+          return;
+        }
+        // Restore session if token exists
+        if (token) {
+          return fetch(AUTH_API, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.ok ? r.json() : null)
+            .then(u => { if (u) setUser(u); })
+            .finally(() => setAuthChecked(true));
+        }
+        setAuthChecked(true);
+      })
+      .catch(() => setAuthChecked(true));
+  }, []);
+
+  const requireLogin = useCallback((action) => {
+    if (user) { action(); }
+    else { setPendingAction(() => action); setShowLogin(true); }
+  }, [user]);
+
+  const handleLogin = useCallback((data) => {
+    localStorage.setItem('auth_token', data.token);
+    setUser({ id: data.id, name: data.name, email: data.email });
+    setShowLogin(false);
+    setPendingAction(prev => { if (prev) { prev(); return null; } return null; });
+  }, []);
+
+  const handleSetupComplete = useCallback((data) => {
+    localStorage.setItem('auth_token', data.token);
+    setUser({ id: data.id, name: data.name, email: data.email });
+    setSetupNeeded(false);
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      fetch(`${AUTH_API}?_method=DELETE`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    }
+    localStorage.removeItem('auth_token');
+    setUser(null);
+  }, []);
 
   // ── Transactions from DB ──────────────────────────────────────────────
   // allTxns: { [ticker]: [{id, date, type, shares, price, fees, note}, ...] }
@@ -1139,6 +1317,8 @@ function App() {
         onBack={() => setSelectedTicker(null)}
         onTxnsChanged={handleTxnsChanged}
         onRemoveHolding={handleRemoveHolding}
+        user={user}
+        onRequireLogin={requireLogin}
         isLive={isLive}
         lastUpdated={lastUpdated}
       />
@@ -1193,8 +1373,22 @@ function App() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {user ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-gray-400 hidden sm:block">{user.name}</span>
+              <button onClick={handleLogout}
+                className="text-[11px] text-gray-400 hover:text-white transition-colors px-2 py-1 rounded-lg border border-gray-700 hover:border-gray-500">
+                Sign out
+              </button>
+            </div>
+          ) : authChecked ? (
+            <button onClick={() => setShowLogin(true)}
+              className="text-xs bg-gray-700 hover:bg-gray-600 transition-colors px-3 py-1.5 rounded-full font-medium">
+              Sign in
+            </button>
+          ) : null}
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => requireLogin(() => setShowAddModal(true))}
             title="Add new holding"
             className="text-xs bg-blue-600 hover:bg-blue-500 active:bg-blue-700 transition-colors px-3 py-1.5 rounded-full font-semibold"
           >
@@ -1214,7 +1408,18 @@ function App() {
         <AddHoldingModal
           onClose={() => setShowAddModal(false)}
           onAdded={handlePortfolioChanged}
+          user={user}
         />
+      )}
+
+      {/* ── Login Modal ── */}
+      {showLogin && (
+        <LoginModal onLogin={handleLogin} onClose={() => { setShowLogin(false); setPendingAction(null); }} />
+      )}
+
+      {/* ── First-time Setup Modal ── */}
+      {setupNeeded && (
+        <SetupModal onComplete={handleSetupComplete} />
       )}
 
       {/* ── Price timestamp bar ── */}

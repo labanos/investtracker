@@ -3,7 +3,7 @@
 // Allow requests from your portfolio app (adjust origin if needed)
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Content-Type: application/json; charset=utf-8');
 
 // Handle preflight
@@ -58,6 +58,9 @@ $id     = isset($_GET['id'])     ? (int)$_GET['id']               : null;
 $ticker = isset($_GET['ticker']) ? trim($_GET['ticker'])           : null;
 $body   = json_decode(file_get_contents('php://input'), true) ?: [];
 
+// ─── Auth ───────────────────────────────────────────────────────────────────
+require_once __DIR__ . '/auth_check.php';
+
 switch ($method) {
 
     // ── GET /notes.php?ticker=AAPL ──────────────────────────────────────────
@@ -85,6 +88,7 @@ switch ($method) {
 
     // ── POST /notes.php  body: {ticker, date, text} ─────────────────────────
     case 'POST':
+        require_auth($pdo);
         $t    = trim($body['ticker'] ?? '');
         $date = trim($body['date']   ?? '');
         $text = trim($body['text']   ?? '');
@@ -105,6 +109,7 @@ switch ($method) {
 
     // ── PUT /notes.php?id=5  body: {date, text} ─────────────────────────────
     case 'PUT':
+        require_auth($pdo);
         if (!$id) { http_response_code(400); echo json_encode(['error' => 'id required']); exit; }
 
         $date = trim($body['date'] ?? '');
@@ -123,6 +128,7 @@ switch ($method) {
 
     // ── DELETE /notes.php?id=5 ───────────────────────────────────────────────
     case 'DELETE':
+        require_auth($pdo);
         if (!$id) { http_response_code(400); echo json_encode(['error' => 'id required']); exit; }
 
         $stmt = $pdo->prepare("DELETE FROM investment_notes WHERE id = ?");

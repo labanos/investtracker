@@ -2,7 +2,7 @@
 // ─── CORS ────────────────────────────────────────────────────────────────────
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Content-Type: application/json; charset=utf-8');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
@@ -70,6 +70,9 @@ $ticker = isset($_GET['ticker']) ? trim($_GET['ticker']) : null;
 $batch  = isset($_GET['batch']);
 $body   = json_decode(file_get_contents('php://input'), true) ?: [];
 
+// ─── Auth ───────────────────────────────────────────────────────────────────
+require_once __DIR__ . '/auth_check.php';
+
 switch ($method) {
 
     // ── GET /transactions.php            → all transactions
@@ -97,6 +100,7 @@ switch ($method) {
     // ── POST /transactions.php            → single transaction
     // ── POST /transactions.php?batch=1   → array of transactions (seed/import)
     case 'POST':
+        require_auth($pdo);
         if ($batch) {
             // Bulk insert — used for one-time migration from hardcoded data
             if (!is_array($body) || count($body) === 0) {
@@ -150,6 +154,7 @@ switch ($method) {
 
     // ── PUT /transactions.php?id=5  body: {date,type,shares,price,fees,note}
     case 'PUT':
+        require_auth($pdo);
         if (!$id) { http_response_code(400); echo json_encode(['error'=>'id required']); exit; }
         $d = trim($body['date']   ?? '');
         $y = trim($body['type']   ?? '');
@@ -170,6 +175,7 @@ switch ($method) {
     // ── DELETE /transactions.php?id=5
     // ── DELETE /transactions.php?ticker=X  → delete ALL transactions for a ticker
     case 'DELETE':
+        require_auth($pdo);
         if ($ticker) {
             $stmt = $pdo->prepare("DELETE FROM transactions WHERE ticker=?");
             $stmt->execute([$ticker]);
