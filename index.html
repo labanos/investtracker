@@ -1223,7 +1223,7 @@ function PieChart({ data }) {
 
 // ─── InsightsPanel ─────────────────────────────────────────────────────────
 function InsightsPanel({ positions, baseCcy, metaLoading }) {
-  const [view, setView] = React.useState('currency');
+  const [view, setView] = React.useState('ticker');
 
   const active = positions.filter(p => p.shares > 0 && p.valueBase > 0);
 
@@ -1242,14 +1242,25 @@ function InsightsPanel({ positions, baseCcy, metaLoading }) {
       }));
   };
 
+  const tickerData = active
+    .slice()
+    .sort((a, b) => b.valueBase - a.valueBase)
+    .map((p, i) => ({
+      label: p.ticker,
+      value: p.valueBase,
+      color: i < INSIGHT_PALETTE.length ? INSIGHT_PALETTE[i] : '#9ca3af',
+    }));
+
   const views = [
+    { key: 'ticker',   label: 'Ticker'   },
     { key: 'currency', label: 'Currency' },
     { key: 'sector',   label: 'Sector'   },
     { key: 'country',  label: 'Country'  },
   ];
 
   const needsMeta = view === 'sector' || view === 'country';
-  const data = view === 'currency' ? groupBy('ccy')
+  const data = view === 'ticker'   ? tickerData
+             : view === 'currency' ? groupBy('ccy')
              : view === 'sector'   ? groupBy('sector')
              :                       groupBy('country');
 
