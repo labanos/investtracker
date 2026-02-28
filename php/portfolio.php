@@ -24,12 +24,14 @@ try {
 }
 
 $pdo->exec("CREATE TABLE IF NOT EXISTS portfolio (
-    id         INT AUTO_INCREMENT PRIMARY KEY,
-    ticker     VARCHAR(20)  NOT NULL UNIQUE,
-    yh_ticker  VARCHAR(30)  NOT NULL,
-    company    VARCHAR(100) NOT NULL,
-    ccy        VARCHAR(10)  NOT NULL DEFAULT 'DKK',
-    created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    portfolio_id INT NOT NULL DEFAULT 1,
+    ticker       VARCHAR(20)  NOT NULL,
+    yh_ticker    VARCHAR(30)  NOT NULL,
+    company      VARCHAR(100) NOT NULL,
+    ccy          VARCHAR(10)  NOT NULL DEFAULT 'DKK',
+    created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_pf_ticker (portfolio_id, ticker)
 )");
 
 require_once __DIR__ . '/db_migrate.php';

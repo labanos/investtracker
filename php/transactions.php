@@ -29,9 +29,10 @@ try {
 // ─── Create table if needed ───────────────────────────────────────────────────
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS transactions (
-        id         INT AUTO_INCREMENT PRIMARY KEY,
-        ticker     VARCHAR(20)   NOT NULL,
-        date       DATE          NOT NULL,
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        portfolio_id INT           NOT NULL DEFAULT 1,
+        ticker       VARCHAR(20)   NOT NULL,
+        date         DATE          NOT NULL,
         type       ENUM('buy','sell') NOT NULL,
         shares     DECIMAL(18,6) NOT NULL,
         price      DECIMAL(18,6) NOT NULL,

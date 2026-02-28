@@ -36,9 +36,10 @@ try {
 // ─── Create table if it doesn't exist ────────────────────────────────────────
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS investment_notes (
-        id         INT AUTO_INCREMENT PRIMARY KEY,
-        ticker     VARCHAR(20)  NOT NULL,
-        date       DATE         NOT NULL,
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        portfolio_id INT          NOT NULL DEFAULT 1,
+        ticker       VARCHAR(20)  NOT NULL,
+        date         DATE         NOT NULL,
         text       TEXT         NOT NULL,
         created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -66,9 +67,18 @@ require_once __DIR__ . '/auth_check.php';
 
 switch ($method) {
 
-    // ── GET /notes.php?ticker=AAPL ──────────────────────────────────────────
+    // ── GET /notes.php?ticker=AAPL&portfolio_id=X ──────────────────────────
     case 'GET':
-        if ($ticker) {
+        $pfId = (int)($_GET['portfolio_id'] ?? 0);
+        if ($ticker && $pfId) {
+            $stmt = $pdo->prepare("
+                SELECT id, ticker, DATE_FORMAT(date,'%Y-%m-%d') AS date, text
+                FROM investment_notes
+                WHERE ticker = ? AND portfolio_id = ?
+                ORDER BY date DESC, id DESC
+            ");
+            $stmt->execute([$ticker, $pfId]);
+        } elseif ($ticker) {
             $stmt = $pdo->prepare("
                 SELECT id, ticker, DATE_FORMAT(date,'%Y-%m-%d') AS date, text
                 FROM investment_notes
@@ -84,7 +94,6 @@ switch ($method) {
             ");
         }
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        // Cast id to int for JS
         foreach ($rows as &$r) { $r['id'] = (int)$r['id']; }
         echo json_encode($rows);
         break;
@@ -92,22 +101,23 @@ switch ($method) {
     // ── POST /notes.php  body: {ticker, date, text} ─────────────────────────
     case 'POST':
         require_auth($pdo);
+        $pfId = (int)($body['portfolio_id'] ?? ($_GET['portfolio_id'] ?? 0));
         $t    = trim($body['ticker'] ?? '');
         $date = trim($body['date']   ?? '');
         $text = trim($body['text']   ?? '');
 
-        if (!$t || !$date || !$text) {
+        if (!$pfId || !$t || !$date || !$text) {
             http_response_code(400);
-            echo json_encode(['error' => 'ticker, date and text are required']);
+            echo json_encode(['error' => 'portfolio_id, ticker, date and text are required']);
             exit;
         }
 
-        $stmt = $pdo->prepare("INSERT INTO investment_notes (ticker, date, text) VALUES (?, ?, ?)");
-        $stmt->execute([$t, $date, $text]);
+        $stmt = $pdo->prepare("INSERT INTO investment_notes (portfolio_id, ticker, date, text) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$pfId, $t, $date, $text]);
         $newId = (int)$pdo->lastInsertId();
 
         http_response_code(201);
-        echo json_encode(['id' => $newId, 'ticker' => $t, 'date' => $date, 'text' => $text]);
+        echo json_encode(['id' => $newId, 'portfolio_id' => $pfId, 'ticker' => $t, 'date' => $date, 'text' => $text]);
         break;
 
     // ── PUT /notes.php?id=5  body: {date, text} ─────────────────────────────
