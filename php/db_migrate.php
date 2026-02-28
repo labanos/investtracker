@@ -69,4 +69,12 @@ function run_migrations($pdo) {
     if (!$hasCol('portfolios', 'base_currency')) {
         $pdo->exec("ALTER TABLE portfolios ADD COLUMN base_currency VARCHAR(3) NOT NULL DEFAULT 'DKK' AFTER name");
     }
+
+    // 7. portfolio (holdings) — add sector + country for insights
+    if ($tableExists('portfolio') && !$hasCol('portfolio', 'sector')) {
+        $pdo->exec("ALTER TABLE portfolio ADD COLUMN sector  VARCHAR(80) NULL AFTER ccy");
+    }
+    if ($tableExists('portfolio') && !$hasCol('portfolio', 'country')) {
+        $pdo->exec("ALTER TABLE portfolio ADD COLUMN country VARCHAR(80) NULL AFTER sector");
+    }
 }

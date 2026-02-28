@@ -49,7 +49,7 @@ if ($method === 'GET') {
     $pfId = (int)($_GET['portfolio_id'] ?? 0);
     if (!$pfId) { http_response_code(400); echo json_encode(['error' => 'portfolio_id required']); exit; }
     $stmt = $pdo->prepare(
-        "SELECT id, ticker, yh_ticker, company, ccy FROM portfolio WHERE portfolio_id = ? ORDER BY created_at ASC"
+        "SELECT id, ticker, yh_ticker, company, ccy, sector, country FROM portfolio WHERE portfolio_id = ? ORDER BY created_at ASC"
     );
     $stmt->execute([$pfId]);
     echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
@@ -111,19 +111,47 @@ if ($method === 'POST') {
     exit;
 }
 
-// ─── PUT — update yh_ticker / company / ccy ───────────────────────────────
+// ─── PUT — update fields (yh_ticker / company / ccy / sector / country / shares / avg_cost) ──
 if ($method === 'PUT') {
     $id   = (int)($_GET['id'] ?? 0);
     $data = json_decode(file_get_contents('php://input'), true);
-    $stmt = $pdo->prepare(
-        "UPDATE portfolio SET yh_ticker=?, company=?, ccy=? WHERE id=?"
-    );
-    $stmt->execute([
-        trim($data['yhTicker'] ?? $data['yh_ticker'] ?? ''),
-        trim($data['company']  ?? ''),
-        strtoupper(trim($data['ccy'] ?? 'USD')),
-        $id
-    ]);
+    if (!$id) { http_response_code(400); echo json_encode(['error' => 'id required']); exit; }
+
+    $updates = [];
+    $params  = [];
+
+    if (array_key_exists('yhTicker', $data) || array_key_exists('yh_ticker', $data)) {
+        $updates[] = 'yh_ticker = ?';
+        $params[]  = trim($data['yhTicker'] ?? $data['yh_ticker'] ?? '');
+    }
+    if (array_key_exists('company', $data)) {
+        $updates[] = 'company = ?';
+        $params[]  = trim($data['company']);
+    }
+    if (array_key_exists('ccy', $data)) {
+        $updates[] = 'ccy = ?';
+        $params[]  = strtoupper(trim($data['ccy']));
+    }
+    if (array_key_exists('sector', $data)) {
+        $updates[] = 'sector = ?';
+        $params[]  = $data['sector'] === null ? null : trim($data['sector']);
+    }
+    if (array_key_exists('country', $data)) {
+        $updates[] = 'country = ?';
+        $params[]  = $data['country'] === null ? null : trim($data['country']);
+    }
+    if (array_key_exists('shares', $data)) {
+        $updates[] = 'shares = ?';
+        $params[]  = (float)$data['shares'];
+    }
+    if (array_key_exists('avg_cost', $data)) {
+        $updates[] = 'avg_cost = ?';
+        $params[]  = (float)$data['avg_cost'];
+    }
+
+    if (empty($updates)) { http_response_code(400); echo json_encode(['error' => 'nothing to update']); exit; }
+    $params[] = $id;
+    $pdo->prepare("UPDATE portfolio SET " . implode(', ', $updates) . " WHERE id = ?")->execute($params);
     echo json_encode(['ok' => true]);
     exit;
 }
