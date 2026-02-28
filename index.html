@@ -369,7 +369,7 @@ function NoteForm({ form, onChange, onSave, onCancel, saving, error, textareaRef
 
 // ─── AddHoldingModal ───────────────────────────────────────────────────────
 // ─── Portfolio Switcher ────────────────────────────────────────────────────
-function PortfolioSwitcher({ portfolios, portfolioId, onSwitch, onCreateNew, user }) {
+function PortfolioSwitcher({ portfolios, portfolioId, onSwitch, onCreateNew, onCcyChange, user }) {
   const [showMenu,   setShowMenu]   = React.useState(false);
   const [creating,   setCreating]   = React.useState(false);
   const [renaming,   setRenaming]   = React.useState(null); // portfolio object
@@ -439,7 +439,7 @@ function PortfolioSwitcher({ portfolios, portfolioId, onSwitch, onCreateNew, use
         <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 z-50 min-w-[180px] py-1 overflow-hidden">
           {portfolios.map(pf => (
             <div key={pf.id} className={`flex items-center justify-between px-3 py-2 hover:bg-gray-50 ${pf.id === portfolioId ? 'bg-blue-50' : ''}`}>
-              <button onClick={() => { onSwitch(pf.id); setShowMenu(false); }}
+              <button onClick={() => { onSwitch(pf.id, pf.base_currency); setShowMenu(false); }}
                 className={`flex-1 text-left text-[13px] ${pf.id === portfolioId ? 'font-semibold text-blue-700' : 'text-gray-700'}`}>
                 {pf.name}
                 {pf.id === portfolioId && <span className="ml-1 text-[10px]">✓</span>}
@@ -454,6 +454,21 @@ function PortfolioSwitcher({ portfolios, portfolioId, onSwitch, onCreateNew, use
               )}
             </div>
           ))}
+          {user && onCcyChange && (() => {
+            const activePf = portfolios.find(p => p.id === portfolioId);
+            return (
+              <div className="px-3 py-2 flex items-center justify-between border-t border-gray-100">
+                <span className="text-[11px] text-gray-400">Display currency</span>
+                <select
+                  value={activePf?.base_currency || 'DKK'}
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => { e.stopPropagation(); onCcyChange(portfolioId, e.target.value); setShowMenu(false); }}
+                  className="text-[12px] border border-gray-200 rounded px-1.5 py-0.5 bg-white outline-none focus:border-blue-300 cursor-pointer ml-2">
+                  {['DKK','USD','EUR','GBP','CAD','SEK','NOK'].map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            );
+          })()}
           {user && (
             <button onClick={() => { setCreating(true); setNewName(''); setShowMenu(false); }}
               className="w-full text-left px-3 py-2 text-[12px] text-blue-600 hover:bg-blue-50 border-t border-gray-100 font-medium">
@@ -933,8 +948,8 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4">
         {[
           { label: 'Price', value: p.price >= 1000 ? n(p.price,0) : n(p.price,2), sub: p.ccy },
-          { label: 'Today', value: pct(p.chgPct), sub: signed(p.todayDKK,0)+' DKK', color: clr(p.chgPct) },
-          { label: 'Total G/L', value: pct(p.glPct), sub: signed(p.glDKK,0)+' DKK', color: clr(p.glPct) },
+          { label: 'Today', value: pct(p.chgPct), sub: signed(p.todayBase,0)+' '+baseCcy, color: clr(p.chgPct) },
+          { label: 'Total G/L', value: pct(p.glPct), sub: signed(p.glBase,0)+' '+baseCcy, color: clr(p.glPct) },
           { label: 'Position', value: p.shares+' shares', sub: 'avg '+n(p.avgCost,2)+' '+p.ccy },
         ].map(({ label, value, sub, color }) => (
           <div key={label} className="bg-white rounded-xl px-4 py-3 shadow-sm border border-gray-100">
@@ -1140,6 +1155,7 @@ function App() {
   // ── Portfolios state ──
   const [portfolios,    setPortfolios]    = useState([]);
   const [portfolioId,   setPortfolioId]   = useState(null); // currently selected portfolio id
+  const [baseCcy,       setBaseCcy]       = useState('DKK');
   const [pfListLoaded,  setPfListLoaded]  = useState(false);
 
   // ── Auth state ──
@@ -1200,7 +1216,9 @@ function App() {
           setPortfolios(pfs);
           const saved = parseInt(localStorage.getItem('selected_portfolio_id'));
           const found = pfs.find(p => p.id === saved);
-          setPortfolioId(found ? found.id : pfs[0].id);
+          const activePf = found || pfs[0];
+          setPortfolioId(activePf.id);
+          setBaseCcy(activePf.base_currency || 'DKK');
         }
         setPfListLoaded(true);
       })
@@ -1235,7 +1253,7 @@ function App() {
     if (pf._deleted) {
       setPortfolios(prev => {
         const next = prev.filter(p => p.id !== pf.id);
-        if (portfolioId === pf.id && next.length > 0) switchPortfolio(next[0].id);
+        if (portfolioId === pf.id && next.length > 0) switchPortfolio(next[0].id, next[0].base_currency);
         return next;
       });
     } else if (pf._rename) {
@@ -1243,12 +1261,13 @@ function App() {
     } else {
       // new portfolio created
       setPortfolios(prev => [...prev, pf]);
-      switchPortfolio(pf.id);
+      switchPortfolio(pf.id, pf.base_currency);
     }
   }, [portfolioId]);
 
-  const switchPortfolio = useCallback((id) => {
+  const switchPortfolio = useCallback((id, ccy) => {
     setPortfolioId(id);
+    if (ccy) setBaseCcy(ccy);
     localStorage.setItem('selected_portfolio_id', id);
     // Reset all portfolio-scoped state so it reloads for the new portfolio
     setPortfolio([]);
@@ -1277,6 +1296,15 @@ function App() {
     localStorage.setItem('auth_token', data.token);
     setUser({ id: data.id, name: data.name, email: data.email });
     setSetupNeeded(false);
+  }, []);
+
+  const handleCcyChange = useCallback(async (pfId, ccy) => {
+    await fetch(`${PORTFOLIOS_API}?_method=PUT&id=${pfId}`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ base_currency: ccy }),
+    });
+    setBaseCcy(ccy);
+    setPortfolios(prev => prev.map(p => p.id === pfId ? { ...p, base_currency: ccy } : p));
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -1440,26 +1468,26 @@ function App() {
   // Enrich each position — shares/avgCost derived from DB transactions
   const enriched = portfolio.map(p => {
     const { shares, avgCost } = computePosition(allTxns[p.ticker] || []);
-    const pd       = prices[p.yhTicker] || { price: p.cachedPrice, chgPct: p.cachedChg };
-    const fxRate   = fx[p.ccy] || 1;
-    const costDKK  = shares * avgCost * fxRate;
-    const valueDKK = shares * pd.price * fxRate;
-    const glDKK    = valueDKK - costDKK;
-    const glPct    = costDKK > 0 ? glDKK / costDKK : 0;
-    const prevPrice = pd.chgPct !== -1 ? pd.price / (1 + pd.chgPct) : pd.price;
-    const todayDKK  = shares * (pd.price - prevPrice) * fxRate;
-    return { ...p, shares, avgCost, price: pd.price, chgPct: pd.chgPct, fxRate, costDKK, valueDKK, glDKK, glPct, todayDKK };
+    const pd         = prices[p.yhTicker] || { price: p.cachedPrice, chgPct: p.cachedChg };
+    const fxToBase   = (fx[p.ccy] || 1) / (fx[baseCcy] || 1);
+    const costBase   = shares * avgCost * fxToBase;
+    const valueBase  = shares * pd.price * fxToBase;
+    const glBase     = valueBase - costBase;
+    const glPct      = costBase > 0 ? glBase / costBase : 0;
+    const prevPrice  = pd.chgPct !== -1 ? pd.price / (1 + pd.chgPct) : pd.price;
+    const todayBase  = shares * (pd.price - prevPrice) * fxToBase;
+    return { ...p, shares, avgCost, price: pd.price, chgPct: pd.chgPct, fxToBase, costBase, valueBase, glBase, glPct, todayBase };
   });
 
-  const totalValue  = enriched.reduce((s,p) => s + p.valueDKK, 0);
-  const totalCost   = enriched.reduce((s,p) => s + p.costDKK, 0);
+  const totalValue  = enriched.reduce((s,p) => s + p.valueBase, 0);
+  const totalCost   = enriched.reduce((s,p) => s + p.costBase, 0);
   const totalGL     = totalValue - totalCost;
   const totalGLPct  = totalCost > 0 ? totalGL / totalCost : 0;
-  const todayTotal  = enriched.reduce((s,p) => s + p.todayDKK, 0);
+  const todayTotal  = enriched.reduce((s,p) => s + p.todayBase, 0);
   const prevTotal   = totalValue - todayTotal;
   const todayPct    = prevTotal > 0 ? todayTotal / prevTotal : 0;
 
-  const withWeight = enriched.map(p => ({ ...p, weight: totalValue > 0 ? p.valueDKK / totalValue : 0 }));
+  const withWeight = enriched.map(p => ({ ...p, weight: totalValue > 0 ? p.valueBase / totalValue : 0 }));
 
   // ── Split active vs closed positions ──
   const activePositions = withWeight.filter(p => p.shares > 0);
@@ -1486,7 +1514,7 @@ function App() {
 
   const sortFn = (a, b) => {
     let diff = 0;
-    if (sortBy === 'value') diff = b.valueDKK - a.valueDKK;
+    if (sortBy === 'value') diff = b.valueBase - a.valueBase;
     if (sortBy === 'today') diff = b.chgPct - a.chgPct;
     if (sortBy === 'gl')    diff = b.glPct - a.glPct;
     return sortDir === 'asc' ? -diff : diff;
@@ -1532,6 +1560,7 @@ function App() {
               portfolioId={portfolioId}
               onSwitch={switchPortfolio}
               onCreateNew={handlePortfolioAction}
+              onCcyChange={handleCcyChange}
               user={user}
             />
           ) : (
@@ -1623,18 +1652,18 @@ function App() {
             <div className="px-4 py-3 border-r border-gray-100">
               <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Portfolio</div>
               <div className="font-bold text-gray-900 mono text-base leading-tight">
-                {n(totalValue, 0)}<span className="text-xs font-normal text-gray-400"> DKK</span>
+                {n(totalValue, 0)}<span className="text-xs font-normal text-gray-400"> {baseCcy}</span>
               </div>
             </div>
             <div className="px-4 py-3 border-r border-gray-100">
               <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Today</div>
               <div className={`font-bold mono text-base leading-tight ${clr(todayTotal)}`}>{pct(todayPct)}</div>
-              <div className={`text-[11px] mono ${clr(todayTotal)}`}>{signed(todayTotal,0)} DKK</div>
+              <div className={`text-[11px] mono ${clr(todayTotal)}`}>{signed(todayTotal,0)} {baseCcy}</div>
             </div>
             <div className="px-4 py-3">
               <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Total G/L</div>
               <div className={`font-bold mono text-base leading-tight ${clr(totalGL)}`}>{pct(totalGLPct)}</div>
-              <div className={`text-[11px] mono ${clr(totalGL)}`}>{signed(totalGL,0)} DKK</div>
+              <div className={`text-[11px] mono ${clr(totalGL)}`}>{signed(totalGL,0)} {baseCcy}</div>
             </div>
           </div>
 
@@ -1659,16 +1688,16 @@ function App() {
                       <div className="text-[11px] text-gray-400 truncate max-w-[110px]">{p.company}</div>
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      <div className="font-medium text-gray-800 mono text-[13px]">{n(p.valueDKK,0)}</div>
+                      <div className="font-medium text-gray-800 mono text-[13px]">{n(p.valueBase,0)}</div>
                       <div className="text-[11px] text-gray-400 mono">{priceStr(p)} <span className="text-[10px]">{p.ccy}</span></div>
                     </td>
                     <td className={`px-3 py-2.5 text-right mono ${clr(p.chgPct)}`}>
                       <div className="text-[13px] font-semibold">{pct(p.chgPct)}</div>
-                      <div className="text-[11px] opacity-80">{signed(p.todayDKK,0)}</div>
+                      <div className="text-[11px] opacity-80">{signed(p.todayBase,0)}</div>
                     </td>
                     <td className={`px-3 py-2.5 text-right mono ${clr(p.glPct)}`}>
                       <div className="text-[13px] font-semibold">{pct(p.glPct)}</div>
-                      <div className="text-[11px] opacity-80">{signed(p.glDKK,0)}</div>
+                      <div className="text-[11px] opacity-80">{signed(p.glBase,0)}</div>
                     </td>
                     <td className="px-3 py-2.5 text-right text-[11px] text-gray-400 mono">
                       {n(p.weight*100,1)}%
@@ -1719,10 +1748,11 @@ function App() {
 
           {/* ── Footer: FX rates ── */}
           <div className="px-4 py-3 text-[11px] text-gray-400 text-center border-t border-gray-100 bg-white mt-0">
-            FX → DKK: &nbsp;
-            USD {fx.USD.toFixed(4)} &nbsp;·&nbsp;
-            EUR {fx.EUR.toFixed(4)} &nbsp;·&nbsp;
-            CAD {fx.CAD.toFixed(4)}
+            FX → {baseCcy}: &nbsp;
+            {baseCcy !== 'USD' && <>USD {(fx.USD/(fx[baseCcy]||1)).toFixed(4)}&nbsp;·&nbsp;</>}
+            {baseCcy !== 'EUR' && <>EUR {(fx.EUR/(fx[baseCcy]||1)).toFixed(4)}&nbsp;·&nbsp;</>}
+            {baseCcy !== 'DKK' && <>DKK {(1/(fx[baseCcy]||1)).toFixed(4)}&nbsp;·&nbsp;</>}
+            {baseCcy !== 'CAD' && <>CAD {(fx.CAD/(fx[baseCcy]||1)).toFixed(4)}</>}
             {!isLive && <span className="ml-2 text-amber-500">cached</span>}
           </div>
         </>

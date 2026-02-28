@@ -64,4 +64,9 @@ function run_migrations($pdo) {
         try { $pdo->exec("ALTER TABLE investment_notes ADD INDEX idx_pf_ticker (portfolio_id, ticker)"); }
         catch (Exception $e) {}
     }
+
+    // 6. portfolios — add base_currency if missing
+    if (!$hasCol('portfolios', 'base_currency')) {
+        $pdo->exec("ALTER TABLE portfolios ADD COLUMN base_currency VARCHAR(3) NOT NULL DEFAULT 'DKK' AFTER name");
+    }
 }

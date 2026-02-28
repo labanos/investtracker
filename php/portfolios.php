@@ -42,29 +42,40 @@ switch ($method) {
 
     // GET /portfolios.php — list all portfolios (public, no auth needed for read)
     case 'GET':
-        $stmt = $pdo->query("SELECT id, name, user_id FROM portfolios ORDER BY created_at ASC");
+        $stmt = $pdo->query("SELECT id, name, base_currency, user_id FROM portfolios ORDER BY created_at ASC");
         echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
         break;
 
-    // POST /portfolios.php — create {name}
+    // POST /portfolios.php — create {name, base_currency?}
     case 'POST':
         $user = require_auth($pdo);
-        $name = trim($body['name'] ?? '');
+        $name    = trim($body['name'] ?? '');
+        $baseCcy = strtoupper(trim($body['base_currency'] ?? 'DKK'));
         if (!$name) { http_response_code(400); echo json_encode(['error' => 'name is required']); exit; }
-        $stmt = $pdo->prepare("INSERT INTO portfolios (name, user_id) VALUES (?, ?)");
-        $stmt->execute([$name, $user['id']]);
+        $stmt = $pdo->prepare("INSERT INTO portfolios (name, base_currency, user_id) VALUES (?, ?, ?)");
+        $stmt->execute([$name, $baseCcy, $user['id']]);
         $newId = (int)$pdo->lastInsertId();
         http_response_code(201);
-        echo json_encode(['id' => $newId, 'name' => $name, 'user_id' => $user['id']]);
+        echo json_encode(['id' => $newId, 'name' => $name, 'base_currency' => $baseCcy, 'user_id' => $user['id']]);
         break;
 
-    // PUT /portfolios.php?id=X — rename {name}
+    // PUT /portfolios.php?id=X — update {name?, base_currency?}
     case 'PUT':
         require_auth($pdo);
         if (!$id) { http_response_code(400); echo json_encode(['error' => 'id required']); exit; }
-        $name = trim($body['name'] ?? '');
-        if (!$name) { http_response_code(400); echo json_encode(['error' => 'name is required']); exit; }
-        $pdo->prepare("UPDATE portfolios SET name = ? WHERE id = ?")->execute([$name, $id]);
+        $updates = [];
+        $params  = [];
+        if (isset($body['name']) && trim($body['name']) !== '') {
+            $updates[] = 'name = ?';
+            $params[]  = trim($body['name']);
+        }
+        if (isset($body['base_currency'])) {
+            $updates[] = 'base_currency = ?';
+            $params[]  = strtoupper(trim($body['base_currency']));
+        }
+        if (empty($updates)) { http_response_code(400); echo json_encode(['error' => 'nothing to update']); exit; }
+        $params[] = $id;
+        $pdo->prepare("UPDATE portfolios SET " . implode(', ', $updates) . " WHERE id = ?")->execute($params);
         echo json_encode(['ok' => true]);
         break;
 
