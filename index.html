@@ -82,7 +82,7 @@ const normalizePfRow = (row) => {
     ticker:       row.ticker,
     yhTicker:     row.yh_ticker || row.yhTicker || row.ticker,
     company:      row.company,
-    ccy:          row.ccy,
+    ccy:          row.ccy || seed.ccy || 'USD',
     cachedPrice:  seed.cachedPrice  || 0,
     cachedChg:    seed.cachedChg    || 0,
   };
