@@ -274,6 +274,8 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
   const WORKER = 'https://yf-proxy.labanos.workers.dev';
 
   const RANGES = [
+    { label: '1D',  value: '1d'  },
+    { label: '5D',  value: '5d'  },
     { label: '1M',  value: '1mo' },
     { label: '3M',  value: '3mo' },
     { label: '6M',  value: '6mo' },
@@ -410,6 +412,8 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
   const formatXLabel = (ts) => {
     const d   = new Date(ts);
     const tz  = 'Europe/Copenhagen';
+    if (range === '1d')  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+    if (range === '5d')  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: tz });
     if (['1mo','3mo'].includes(range)) return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: tz });
     if (['6mo','ytd','1y'].includes(range)) return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: tz });
     return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: tz });
@@ -483,7 +487,11 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
     if (hover) {
       const d       = new Date(hover.point.t);
       const tz      = 'Europe/Copenhagen';
-      const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
+      const isIntra = ['1d', '5d'].includes(range);
+      const dateStr = isIntra
+        ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz })
+          + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz })
+        : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
       const tipW = 190, tipH = 54;
       const tipX = Math.min(hover.x + 12, PAD.l + chartW - tipW - 4);
       const tipY = Math.max(hover.y - tipH - 10, PAD.t);
