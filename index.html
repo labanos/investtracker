@@ -1147,8 +1147,12 @@ const INSIGHT_PALETTE = [
 ];
 
 // ─── PieChart — pure SVG donut ─────────────────────────────────────────────
+const PIE_LEGEND_MAX = 10;
+
 function PieChart({ data }) {
-  const [hovered, setHovered] = React.useState(null);
+  const [hovered,   setHovered]   = React.useState(null);
+  const [collapsed, setCollapsed] = React.useState(true);
+
   const size = 200, cx = 100, cy = 100, R = 80, r = 50;
   const total = data.reduce((s, d) => s + d.value, 0);
   if (total === 0) return null;
@@ -1169,9 +1173,11 @@ function PieChart({ data }) {
   };
 
   const hSlice = hovered !== null ? slices[hovered] : null;
+  const visibleSlices = collapsed ? slices.slice(0, PIE_LEGEND_MAX) : slices;
+  const hiddenCount   = slices.length - PIE_LEGEND_MAX;
 
   return (
-    <div className="flex flex-col sm:flex-row items-center gap-6">
+    <div className="flex flex-col sm:flex-row items-start gap-6" style={{ maxWidth: 560 }}>
       <svg width={size} height={size} style={{ flexShrink: 0 }}>
         {slices.map((s, i) => (
           <path key={i}
@@ -1194,21 +1200,22 @@ function PieChart({ data }) {
           </>
         ) : (
           <text x={cx} y={cy + 5} textAnchor="middle" fontSize="11" fill="#d1d5db">
-            {data.length} groups
+            {data.length} {data.length === 1 ? 'item' : 'items'}
           </text>
         )}
       </svg>
 
       {/* Legend */}
-      <div className="flex flex-col gap-1 w-full min-w-0">
-        {slices.map((s, i) => (
+      <div className="flex flex-col gap-0.5 min-w-0" style={{ width: 300 }}>
+        {visibleSlices.map((s, i) => (
           <div key={i}
             className="flex items-center gap-2 cursor-default py-0.5"
             onMouseEnter={() => setHovered(i)}
             onMouseLeave={() => setHovered(null)}
           >
             <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: s.color }} />
-            <span className={`text-[12px] truncate transition-colors ${hovered === i ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
+            <span className={`text-[12px] truncate transition-colors ${hovered === i ? 'font-semibold text-gray-900' : 'text-gray-600'}`}
+                  style={{ maxWidth: 180 }}>
               {s.label}
             </span>
             <span className="text-[11px] text-gray-400 ml-auto flex-shrink-0 mono">
@@ -1216,6 +1223,16 @@ function PieChart({ data }) {
             </span>
           </div>
         ))}
+        {slices.length > PIE_LEGEND_MAX && (
+          <button
+            onClick={() => setCollapsed(v => !v)}
+            className="mt-1 text-[11px] text-gray-400 hover:text-gray-600 text-left transition-colors"
+          >
+            {collapsed
+              ? `▸ Show ${hiddenCount} more`
+              : `▴ Show less`}
+          </button>
+        )}
       </div>
     </div>
   );
