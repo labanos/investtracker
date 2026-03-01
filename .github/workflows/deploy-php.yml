@@ -28,6 +28,10 @@ jobs:
           sed -i "s|%%DB_USER%%|${{ secrets.DB_USER }}|g" php/notes.php php/transactions.php php/portfolio.php php/portfolios.php php/auth.php
           sed -i "s|%%DB_PASS%%|${{ secrets.DB_PASS }}|g" php/notes.php php/transactions.php php/portfolio.php php/portfolios.php php/auth.php
 
+      - name: Inject API keys
+        run: |
+          sed -i "s|%%FMP_API_KEY%%|${{ secrets.FMP_API_KEY }}|g" php/meta.php
+
       - name: Install sshpass
         run: sudo apt-get install -y sshpass
 

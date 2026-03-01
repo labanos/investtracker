@@ -1,8 +1,9 @@
 <?php
-// ─── meta.php — sector/country metadata for holdings ────────────────────────
-// Strategy: 1) static known-ticker map (instant, no external calls)
-//           2) ticker-suffix inference for country
-//           3) Yahoo Finance curl as last-resort fallback
+// ─── meta.php — sector/country/industry metadata for holdings ────────────────
+// Strategy: 1) static known-ticker map   (instant, no external calls)
+//           2) FMP API                   (dynamic, rate-limited free plan)
+//           3) exchange-suffix inference (country only, free)
+//           4) give up
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, OPTIONS');
@@ -120,7 +121,76 @@ if (isset($STATIC[$ticker])) {
     exit;
 }
 
-// ── 2. Country inference from ticker exchange suffix ─────────────────────────
+// ── Shared HTTP helper ────────────────────────────────────────────────────────
+function http_get(string $url, array $headers = []): array {
+    if (!function_exists('curl_init')) {
+        return ['ok' => false, 'code' => 0, 'body' => null];
+    }
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 3,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        CURLOPT_HTTPHEADER     => array_merge(['Accept: application/json'], $headers),
+    ]);
+    $body = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['ok' => $body !== false && $code === 200, 'code' => $code, 'body' => $body ?: null];
+}
+
+// ── 2. FMP API lookup ─────────────────────────────────────────────────────────
+// API key injected by GitHub Actions from repository secret FMP_API_KEY
+$FMP_KEY = '%%FMP_API_KEY%%';
+
+// FMP returns ISO 3166-1 alpha-2 codes; map to full names for display consistency
+function fmp_country(string $code): string {
+    static $map = [
+        'US' => 'United States',      'GB' => 'United Kingdom',   'DE' => 'Germany',
+        'FR' => 'France',             'NL' => 'Netherlands',      'DK' => 'Denmark',
+        'SE' => 'Sweden',             'NO' => 'Norway',           'FI' => 'Finland',
+        'IT' => 'Italy',              'ES' => 'Spain',            'CH' => 'Switzerland',
+        'AT' => 'Austria',            'BE' => 'Belgium',          'PT' => 'Portugal',
+        'IE' => 'Ireland',            'LU' => 'Luxembourg',       'GR' => 'Greece',
+        'CN' => 'China',              'JP' => 'Japan',            'KR' => 'South Korea',
+        'TW' => 'Taiwan',             'HK' => 'Hong Kong',        'SG' => 'Singapore',
+        'IN' => 'India',              'AU' => 'Australia',        'NZ' => 'New Zealand',
+        'CA' => 'Canada',             'MX' => 'Mexico',           'BR' => 'Brazil',
+        'AR' => 'Argentina',          'CL' => 'Chile',            'CO' => 'Colombia',
+        'IL' => 'Israel',             'ZA' => 'South Africa',     'NG' => 'Nigeria',
+        'RU' => 'Russia',             'TR' => 'Turkey',           'SA' => 'Saudi Arabia',
+        'AE' => 'United Arab Emirates', 'QA' => 'Qatar',          'EG' => 'Egypt',
+        'PA' => 'Panama',             'KY' => 'Cayman Islands',   'BM' => 'Bermuda',
+        'VG' => 'British Virgin Islands', 'CY' => 'Cyprus',
+    ];
+    return $map[strtoupper($code)] ?? $code;
+}
+
+if ($FMP_KEY !== '%%FMP_API_KEY%%' && $FMP_KEY !== '') {
+    // Strip exchange suffix for FMP (it prefers bare symbols, e.g. NOVO-B not NOVO-B.CO)
+    $fmpSymbol = preg_replace('/\.[A-Z]{1,3}$/', '', $ticker);
+    $fmpUrl    = 'https://financialmodelingprep.com/stable/profile'
+               . '?symbol=' . urlencode($fmpSymbol)
+               . '&apikey=' . urlencode($FMP_KEY);
+    $fmp = http_get($fmpUrl);
+    if ($fmp['ok'] && $fmp['body']) {
+        $data = json_decode($fmp['body'], true);
+        $p    = is_array($data) ? ($data[0] ?? null) : null;
+        if ($p && !empty($p['sector'])) {
+            echo json_encode([
+                'sector'   => $p['sector']                                     ?: null,
+                'industry' => $p['industry']                                   ?: null,
+                'country'  => !empty($p['country']) ? fmp_country($p['country']) : null,
+            ]);
+            exit;
+        }
+    }
+}
+
+// ── 3. Country inference from ticker exchange suffix ─────────────────────────
 function infer_country(string $ticker): ?string {
     if (str_contains($ticker, '.CO'))  return 'Denmark';
     if (str_contains($ticker, '.AS'))  return 'Netherlands';
@@ -143,53 +213,9 @@ function infer_country(string $ticker): ?string {
     if (str_contains($ticker, '.SA'))  return 'Brazil';
     if (str_contains($ticker, '.MX'))  return 'Mexico';
     if (str_contains($ticker, '.TO') || str_contains($ticker, '.V'))   return 'Canada';
-    // No recognised suffix → assume US
     return null;
 }
 
-// ── 3. Yahoo Finance curl fallback ───────────────────────────────────────────
-function yf_fetch(string $url): array {
-    if (!function_exists('curl_init')) {
-        return ['ok' => false, 'code' => 0, 'error' => 'curl not available', 'body' => null];
-    }
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS      => 3,
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        CURLOPT_HTTPHEADER     => [
-            'Accept: application/json, text/plain, */*',
-            'Accept-Language: en-US,en;q=0.9',
-            'Referer: https://finance.yahoo.com/',
-        ],
-    ]);
-    $body = curl_exec($ch);
-    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err  = curl_error($ch);
-    curl_close($ch);
-    return ['ok' => $body !== false && $code === 200, 'code' => $code, 'error' => $err ?: null, 'body' => $body ?: null];
-}
-
-$yfUrl  = "https://query2.finance.yahoo.com/v1/finance/quoteSummary/" . urlencode($ticker) . "?modules=assetProfile";
-$result = yf_fetch($yfUrl);
-
-if ($result['ok']) {
-    $data    = json_decode($result['body'], true);
-    $profile = $data['quoteSummary']['result'][0]['assetProfile'] ?? null;
-    if ($profile) {
-        echo json_encode([
-            'sector'   => $profile['sector']   ?? null,
-            'industry' => $profile['industry'] ?? null,
-            'country'  => $profile['country']  ?? null,
-        ]);
-        exit;
-    }
-}
-
-// ── 4. Best-effort response from suffix inference ─────────────────────────────
 $inferredCountry = infer_country($ticker);
 if ($inferredCountry) {
     echo json_encode([
@@ -200,6 +226,6 @@ if ($inferredCountry) {
     exit;
 }
 
-// ── 5. Give up ────────────────────────────────────────────────────────────────
-http_response_code(502);
-echo json_encode(['error' => 'metadata unavailable', 'ticker' => $ticker, 'yfCode' => $result['code']]);
+// ── 4. Give up ────────────────────────────────────────────────────────────────
+http_response_code(404);
+echo json_encode(['error' => 'metadata unavailable', 'ticker' => $ticker]);
