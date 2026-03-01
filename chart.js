@@ -29,7 +29,13 @@ const StockChart = ({ yhTicker, ccy }) => {
     setHover(null);
     fetch(`${WORKER}/?chart=${encodeURIComponent(yhTicker)}&range=${range}`)
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
+      .then(d => {
+        // Yahoo Finance returns timestamps in Unix SECONDS; normalise to ms for Date()
+        const toMs = t => t < 1e12 ? t * 1000 : t;
+        if (d.points) d = { ...d, points: d.points.map(p => ({ ...p, t: toMs(p.t) })) };
+        setData(d);
+        setLoading(false);
+      })
       .catch(e => { setError(e.message); setLoading(false); });
   }, [yhTicker, range]);
 
@@ -331,10 +337,17 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
     if (baseCcy !== 'DKK') fxSymbols.push(`${baseCcy}DKK=X`);
     const uniqFx = [...new Set(fxSymbols)];
 
+    // Yahoo Finance returns timestamps in Unix SECONDS; normalise to ms for Date()
+    const toMs = t => t < 1e12 ? t * 1000 : t;
+
     const fetchChart = sym =>
       fetch(`${WORKER}/?chart=${encodeURIComponent(sym)}&range=${range}`)
         .then(r => r.json())
-        .then(d => ({ sym, points: (d.points || []) }))
+        .then(d => {
+          const raw = d.points || [];
+          const pts = raw.map(p => ({ t: toMs(p.t), c: p.c }));
+          return { sym, points: pts };
+        })
         .catch(() => ({ sym, points: [] }));
 
     Promise.all([...yhTickers, ...uniqFx].map(fetchChart)).then(results => {
