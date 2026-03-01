@@ -46,6 +46,18 @@
 - [x] **Frontend: Currency selector in switcher dropdown** — "Display currency" `<select>` persists the chosen currency to the DB immediately via PUT.
 - [x] **Frontend: `baseCcy` prop passed to `DetailPage`** — Fixed crash (`ReferenceError: baseCcy is not defined`) caused by missing prop thread-down.
 
+### 📈 Portfolio History Chart
+
+- [x] **Computed portfolio value history** — `PortfolioChart` component reconstructs share counts from transaction history and multiplies by price data fetched via the Cloudflare Worker, producing a full portfolio value curve without any server-side snapshots.
+- [x] **Range chips: 1D · 5D · 1M · 3M · 6M · YTD · 1Y · 2Y · 5Y · MAX** — Matches the StockChart range set. Intraday (1D/5D) shows time on x-axis and in tooltip.
+- [x] **Full trading-day coverage on 1D** — Union grid merges EU and US ticker timestamps so the chart spans 09:00–22:00 CET (both markets), not just EU hours. Weekly/monthly ranges use a single-ticker grid to avoid FX timestamp mismatches.
+- [x] **Header: % change + absolute value change** — Period return label renamed from "return" to "change"; absolute value delta (e.g. `+142.500 DKK`) shown alongside the percentage in matching green/red.
+- [x] **Stacked header layout** — Change info on row 1, range chips on row 2 — clean on mobile/iPhone width.
+- [x] **Bug: timestamps in Unix seconds** — Yahoo Finance returns `result.timestamp` in seconds; `new Date(t)` treated them as ms → all dates resolved to 1970 → `sharesOnDate` always returned 0. Fixed by normalising `t` to ms (`t < 1e12 ? t * 1000 : t`) at fetch time in both `StockChart` and `PortfolioChart`.
+- [x] **Bug: `t.quantity` → `t.shares`** — `sharesOnDate` used the wrong field name; `Number(undefined) = NaN` silently zeroed all share counts.
+- [x] **Bug: cliff-drops on 1Y/2Y/5Y/MAX** — Union grid caused FX rate timestamps to fall just outside the 4-day tolerance on monthly data → USD/EUR/CAD positions dropped to zero once a month. Fixed by reverting to single-ticker grid for non-intraday ranges.
+- [x] **Bug: duplicate dates on 1Y/2Y** — Union grid produced two weekly grid points for the same Friday (EU close 17:00 CET + US close 22:00 CET). Same fix as above.
+
 ### 🐛 Bug Fixes
 
 - [x] **Stale auth token 401** — On `GET /auth.php` returning 401, token is cleared from `localStorage` so the app doesn't loop.
