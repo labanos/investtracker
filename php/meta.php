@@ -178,8 +178,13 @@ $fmpIndustry    = null;
 $fmpCountry     = null;
 $fmpCompanyName = null;
 
-if (isset($_GET['debug']) && ($FMP_KEY === '%%FMP_API_KEY%%' || $FMP_KEY === '')) {
-    echo json_encode(['error' => 'FMP key not injected', 'key_len' => strlen($FMP_KEY)]); exit;
+if (isset($_GET['debug'])) {
+    echo json_encode([
+        'key_len'        => strlen($FMP_KEY),
+        'key_first3'     => substr($FMP_KEY, 0, 3),
+        'is_placeholder' => ($FMP_KEY === '%%FMP_API_KEY%%'),
+        'is_empty'       => ($FMP_KEY === ''),
+    ]); exit;
 }
 
 if ($FMP_KEY !== '%%FMP_API_KEY%%' && $FMP_KEY !== '') {
