@@ -178,6 +178,10 @@ $fmpIndustry    = null;
 $fmpCountry     = null;
 $fmpCompanyName = null;
 
+if (isset($_GET['debug']) && ($FMP_KEY === '%%FMP_API_KEY%%' || $FMP_KEY === '')) {
+    echo json_encode(['error' => 'FMP key not injected', 'key_len' => strlen($FMP_KEY)]); exit;
+}
+
 if ($FMP_KEY !== '%%FMP_API_KEY%%' && $FMP_KEY !== '') {
     // Strip exchange suffix for FMP (it prefers bare symbols, e.g. NOVO-B not NOVO-B.CO)
     $fmpSymbol = preg_replace('/\.[A-Z]{1,3}$/', '', $ticker);
@@ -185,7 +189,11 @@ if ($FMP_KEY !== '%%FMP_API_KEY%%' && $FMP_KEY !== '') {
                . '?symbol=' . urlencode($fmpSymbol)
                . '&apikey=' . urlencode($FMP_KEY);
     $fmp = http_get($fmpUrl);
-    if (isset($_GET['debug'])) { echo $fmp['body']; exit; }
+    if (isset($_GET['debug'])) {
+        $keys = $p ? array_keys((array)$p) : [];
+        echo json_encode(['http_code' => $fmp['code'], 'keys' => $keys, 'companyName' => ($p['companyName'] ?? 'KEY_MISSING'), 'name' => ($p['name'] ?? 'KEY_MISSING')]);
+        exit;
+    }
     if ($fmp['ok'] && $fmp['body']) {
         $data = json_decode($fmp['body'], true);
         $p    = is_array($data) ? ($data[0] ?? null) : null;
