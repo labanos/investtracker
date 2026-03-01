@@ -301,7 +301,12 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
       return sum;
     }, 0);
 
-  // ── Binary-search nearest price point (within 4-day window) ─────────────────
+  // ── Binary-search nearest price point ────────────────────────────────────────
+  // Tolerance: 1 day for intraday (so a stock's last traded price is used across
+  // the rest of the day, but no stale data from previous days bleeds in);
+  // 4 days for daily/weekly/monthly (handles non-trading days / calendar gaps).
+  const PRICE_WIN = ['1d', '5d'].includes(range) ? 86400000 : 86400000 * 4;
+
   const priceAt = (pricePts, ts) => {
     if (!pricePts || pricePts.length === 0) return null;
     let lo = 0, hi = pricePts.length - 1;
@@ -312,7 +317,7 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
     const candidates = lo > 0 ? [pricePts[lo - 1], pricePts[lo]] : [pricePts[lo]];
     const best = candidates.reduce((a, b) =>
       Math.abs(a.t - ts) < Math.abs(b.t - ts) ? a : b);
-    return Math.abs(best.t - ts) < 86400000 * 4 ? best.c : null;
+    return Math.abs(best.t - ts) < PRICE_WIN ? best.c : null;
   };
 
   // ── Fetch + compute portfolio value series ────────────────────────────────────
@@ -356,10 +361,12 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
       const priceMap = {};
       results.forEach(r => { priceMap[r.sym] = r.points; });
 
-      // Use the ticker with the most data points as the date grid
-      const gridPoints = [...yhTickers]
-        .map(s => priceMap[s] || [])
-        .sort((a, b) => b.length - a.length)[0] || [];
+      // Build a union of all stock timestamps as the date grid so the chart
+      // spans the full day (European 09:00 CET → US close ~22:00 CET) instead
+      // of being clipped to whichever single market has the most data points.
+      const tsSet = new Set();
+      yhTickers.forEach(sym => (priceMap[sym] || []).forEach(p => tsSet.add(p.t)));
+      const gridPoints = [...tsSet].sort((a, b) => a - b).map(t => ({ t }));
 
       if (gridPoints.length < 2) { setLoading(false); setPts([]); return; }
 
