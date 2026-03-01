@@ -1395,7 +1395,7 @@ function App() {
     // Include 'Unknown' so holdings enriched with the old broken proxy get re-enriched.
     // metaAttempted ref prevents infinite retries for tickers that are genuinely unknown.
     const missing = portfolio.filter(p =>
-      p.id && (p.sector == null || p.sector === 'Unknown') && !metaAttempted.current.has(p.id)
+      p.id && (p.sector == null || p.sector === 'Unknown' || !p.company) && !metaAttempted.current.has(p.id)
     );
     if (missing.length === 0) return;
 
@@ -1418,22 +1418,27 @@ function App() {
         if (cancelled) return;
         const sector  = metaJson?.sector  || 'Unknown';
         const country = metaJson?.country || 'Unknown';
-        setPortfolio(prev => prev.map(p => p.id === holding.id ? { ...p, sector, country } : p));
+        const update  = { sector, country };
+        // Fill in company name if it's missing and FMP returned one
+        if (!holding.company && metaJson?.companyName) update.company = metaJson.companyName;
+        setPortfolio(prev => prev.map(p => p.id === holding.id ? { ...p, ...update } : p));
         // Persist to DB so subsequent loads skip this fetch
         fetch(`${PORTFOLIO_API}?_method=PUT&id=${holding.id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
-          body: JSON.stringify({ sector, country }),
+          body: JSON.stringify(update),
         }).catch(() => {});
       } catch (e) {
         if (!cancelled) {
           setPortfolio(prev => prev.map(p => p.id === holding.id ? { ...p, sector: 'Unknown', country: 'Unknown' } : p));
-          // Persist so we don't retry on every page load
-          fetch(`${PORTFOLIO_API}?_method=PUT&id=${holding.id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...authHeaders() },
-            body: JSON.stringify({ sector: 'Unknown', country: 'Unknown' }),
-          }).catch(() => {});
+          // Only persist sector/country as Unknown — don't overwrite a blank company with nothing useful
+          if (holding.sector == null || holding.sector === 'Unknown') {
+            fetch(`${PORTFOLIO_API}?_method=PUT&id=${holding.id}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...authHeaders() },
+              body: JSON.stringify({ sector: 'Unknown', country: 'Unknown' }),
+            }).catch(() => {});
+          }
         }
       } finally {
         if (!cancelled) setMetaLoading(prev => Math.max(0, prev - 1));

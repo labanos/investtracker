@@ -179,11 +179,12 @@ if ($FMP_KEY !== '%%FMP_API_KEY%%' && $FMP_KEY !== '') {
     if ($fmp['ok'] && $fmp['body']) {
         $data = json_decode($fmp['body'], true);
         $p    = is_array($data) ? ($data[0] ?? null) : null;
-        if ($p && !empty($p['sector'])) {
+        if ($p && (!empty($p['sector']) || !empty($p['companyName']))) {
             echo json_encode([
-                'sector'   => $p['sector']                                     ?: null,
-                'industry' => $p['industry']                                   ?: null,
-                'country'  => !empty($p['country']) ? fmp_country($p['country']) : null,
+                'sector'      => $p['sector']                                     ?: null,
+                'industry'    => $p['industry']                                   ?: null,
+                'country'     => !empty($p['country']) ? fmp_country($p['country']) : null,
+                'companyName' => $p['companyName']                                ?: null,
             ]);
             exit;
         }
