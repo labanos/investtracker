@@ -7,12 +7,8 @@ on:
       - 'php/notes.php'
       - 'php/transactions.php'
       - 'php/portfolio.php'
-      - 'php/portfolios.php'
-      - 'php/auth.php'
-      - 'php/auth_check.php'
+      - 'php/portfolio_history.php'
       - 'php/db_migrate.php'
-      - 'php/meta.php'
-      - 'php/.htaccess'
 
 jobs:
   deploy:
@@ -23,14 +19,11 @@ jobs:
 
       - name: Inject DB credentials
         run: |
-          sed -i "s|%%DB_HOST%%|${{ secrets.DB_HOST }}|g" php/notes.php php/transactions.php php/portfolio.php php/portfolios.php php/auth.php
-          sed -i "s|%%DB_NAME%%|${{ secrets.DB_NAME }}|g" php/notes.php php/transactions.php php/portfolio.php php/portfolios.php php/auth.php
-          sed -i "s|%%DB_USER%%|${{ secrets.DB_USER }}|g" php/notes.php php/transactions.php php/portfolio.php php/portfolios.php php/auth.php
-          sed -i "s|%%DB_PASS%%|${{ secrets.DB_PASS }}|g" php/notes.php php/transactions.php php/portfolio.php php/portfolios.php php/auth.php
-
-      - name: Inject API keys
-        run: |
-          sed -i "s|%%FMP_API_KEY%%|${{ secrets.FMP_API_KEY }}|g" php/meta.php
+          FILES="php/notes.php php/transactions.php php/portfolio.php php/portfolio_history.php php/db_migrate.php"
+          sed -i "s|%%DB_HOST%%|${{ secrets.DB_HOST }}|g" $FILES
+          sed -i "s|%%DB_NAME%%|${{ secrets.DB_NAME }}|g" $FILES
+          sed -i "s|%%DB_USER%%|${{ secrets.DB_USER }}|g" $FILES
+          sed -i "s|%%DB_PASS%%|${{ secrets.DB_PASS }}|g" $FILES
 
       - name: Install sshpass
         run: sudo apt-get install -y sshpass
@@ -45,13 +38,9 @@ jobs:
           put php/notes.php notes.php
           put php/transactions.php transactions.php
           put php/portfolio.php portfolio.php
-          put php/portfolios.php portfolios.php
-          put php/auth.php auth.php
-          put php/auth_check.php auth_check.php
+          put php/portfolio_history.php portfolio_history.php
           put php/db_migrate.php db_migrate.php
-          put php/meta.php meta.php
-          put php/.htaccess .htaccess
           SFTP
 
       - name: Done
-        run: echo "✅ All PHP files deployed to labanos.dk"
+        run: echo "✅ PHP files deployed to labanos.dk"

@@ -65,16 +65,14 @@ function run_migrations($pdo) {
         catch (Exception $e) {}
     }
 
-    // 6. portfolios — add base_currency if missing
-    if (!$hasCol('portfolios', 'base_currency')) {
-        $pdo->exec("ALTER TABLE portfolios ADD COLUMN base_currency VARCHAR(3) NOT NULL DEFAULT 'DKK' AFTER name");
-    }
-
-    // 7. portfolio (holdings) — add sector + country for insights
-    if ($tableExists('portfolio') && !$hasCol('portfolio', 'sector')) {
-        $pdo->exec("ALTER TABLE portfolio ADD COLUMN sector  VARCHAR(80) NULL AFTER ccy");
-    }
-    if ($tableExists('portfolio') && !$hasCol('portfolio', 'country')) {
-        $pdo->exec("ALTER TABLE portfolio ADD COLUMN country VARCHAR(80) NULL AFTER sector");
-    }
+    // 6. portfolio_snapshots — daily total-value history per portfolio/currency
+    $pdo->exec("CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        portfolio_id  INT NOT NULL,
+        snapshot_date DATE NOT NULL,
+        total_value   DECIMAL(18,4) NOT NULL,
+        base_ccy      VARCHAR(10) NOT NULL DEFAULT 'DKK',
+        UNIQUE KEY uniq_pf_date_ccy (portfolio_id, snapshot_date, base_ccy),
+        INDEX idx_pf_ccy (portfolio_id, base_ccy)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }

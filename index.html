@@ -66,6 +66,7 @@ const PORTFOLIO_API    = 'https://labanos.dk/portfolio.php';
 const META_API         = 'https://labanos.dk/meta.php';
 const AUTH_API         = 'https://labanos.dk/auth.php';
 const PORTFOLIOS_API   = 'https://labanos.dk/portfolios.php';
+const HISTORY_API      = 'https://labanos.dk/portfolio_history.php';
 
 // Returns fetch headers including auth token if logged in
 const authHeaders = () => {
@@ -1331,8 +1332,10 @@ function App() {
   const [showClosed,    setShowClosed]    = useState(false);
   const [showAddModal,  setShowAddModal]  = useState(false);
   const [showInsights,  setShowInsights]  = useState(false);
+  const [showHistory,   setShowHistory]   = useState(false);
   const [metaLoading,   setMetaLoading]   = useState(0);
-  const metaAttempted   = React.useRef(new Set()); // IDs attempted this session
+  const metaAttempted      = React.useRef(new Set()); // IDs attempted this session
+  const snapshotRecorded   = React.useRef(new Set()); // portfolioIds snapshotted this session
 
   // ── Portfolios state ──
   const [portfolios,    setPortfolios]    = useState([]);
@@ -1729,6 +1732,18 @@ function App() {
 
   const withWeight = enriched.map(p => ({ ...p, weight: totalValue > 0 ? p.valueBase / totalValue : 0 }));
 
+  // ── Record daily portfolio snapshot (once per portfolio per session, live prices only) ──
+  useEffect(() => {
+    if (!user || !portfolioId || !isLive || totalValue <= 0) return;
+    if (snapshotRecorded.current.has(portfolioId)) return;
+    snapshotRecorded.current.add(portfolioId);
+    fetch(HISTORY_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ portfolio_id: portfolioId, total_value: totalValue, base_ccy: baseCcy }),
+    }).catch(() => {});
+  }, [user, portfolioId, isLive, totalValue, baseCcy]);
+
   // ── Split active vs closed positions ──
   const activePositions = withWeight.filter(p => p.shares > 0);
   const closedPositions = withWeight.filter(p => p.shares === 0);
@@ -1906,19 +1921,42 @@ function App() {
               <div className={`font-bold mono text-base leading-tight ${clr(totalGL)}`}>{pct(totalGLPct)}</div>
               <div className={`text-[11px] mono ${clr(totalGL)}`}>{signed(totalGL,0)} {baseCcy}</div>
             </div>
-            <button
-              onClick={() => setShowInsights(v => !v)}
-              title="Portfolio insights"
-              className={`px-4 flex flex-col items-center justify-center gap-0.5 transition-colors border-l-0 ${
-                showInsights ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
-              </svg>
-              <span className="text-[9px] uppercase tracking-wide font-medium">Insights</span>
-            </button>
+            {/* icon buttons stacked */}
+            <div className="flex flex-col border-l border-gray-100 divide-y divide-gray-100">
+              <button
+                onClick={() => { setShowHistory(v => !v); setShowInsights(false); }}
+                title="Portfolio value history"
+                className={`flex-1 px-4 flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                  showHistory ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {/* line chart icon */}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+                <span className="text-[9px] uppercase tracking-wide font-medium">History</span>
+              </button>
+              <button
+                onClick={() => { setShowInsights(v => !v); setShowHistory(false); }}
+                title="Portfolio insights"
+                className={`flex-1 px-4 flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                  showInsights ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
+                </svg>
+                <span className="text-[9px] uppercase tracking-wide font-medium">Insights</span>
+              </button>
+            </div>
           </div>
+
+          {/* ── History panel ── */}
+          {showHistory && (
+            <div className="px-4 pt-3 pb-1 bg-gray-50 border-b border-gray-100">
+              <PortfolioChart portfolioId={portfolioId} ccy={baseCcy} apiBase="https://labanos.dk" />
+            </div>
+          )}
 
           {/* ── Insights panel ── */}
           {showInsights && (
