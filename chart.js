@@ -556,11 +556,12 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
     <div style={{ background: 'white', borderRadius: '12px', padding: '16px 20px 10px',
       marginBottom: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
 
-      {/* header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: '10px', gap: '8px' }}>
+      {/* header — stacked: change info row, then range chips row */}
+      <div style={{ marginBottom: '10px' }}>
+
+        {/* row 1: % change + absolute change + label */}
         <div style={{ fontSize: '15px', fontWeight: 600,
-          color: periodReturn != null ? color : '#64748b', flexShrink: 0 }}>
+          color: periodReturn != null ? color : '#64748b', marginBottom: '8px' }}>
           {periodReturn != null
             ? `${periodReturn >= 0 ? '+' : ''}${periodReturn.toFixed(2)}%`
             : loading ? 'Computing…' : '—'}
@@ -576,9 +577,9 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
           )}
         </div>
 
-        {/* range tabs */}
-        <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', flexShrink: 1, minWidth: 0,
-          paddingBottom: '2px', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+        {/* row 2: range chips */}
+        <div style={{ display: 'flex', gap: '4px', overflowX: 'auto',
+          msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
           {RANGES.map(r => (
             <button key={r.value} onClick={() => { setRange(r.value); setHover(null); }} style={{
               flexShrink: 0, padding: '3px 10px', borderRadius: '6px', border: 'none',
@@ -589,6 +590,7 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
             }}>{r.label}</button>
           ))}
         </div>
+
       </div>
 
       {/* chart area */}
