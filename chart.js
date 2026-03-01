@@ -289,7 +289,7 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
   // ── Share count for a ticker on a given date ─────────────────────────────────
   const sharesOnDate = (txns, dateStr) =>
     (txns || []).reduce((sum, t) => {
-      if (t.date <= dateStr) sum += t.type === 'buy' ? Number(t.quantity) : -Number(t.quantity);
+      if (t.date <= dateStr) sum += t.type === 'buy' ? Number(t.shares) : -Number(t.shares);
       return sum;
     }, 0);
 
