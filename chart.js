@@ -361,12 +361,24 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
       const priceMap = {};
       results.forEach(r => { priceMap[r.sym] = r.points; });
 
-      // Build a union of all stock timestamps as the date grid so the chart
-      // spans the full day (European 09:00 CET → US close ~22:00 CET) instead
-      // of being clipped to whichever single market has the most data points.
-      const tsSet = new Set();
-      yhTickers.forEach(sym => (priceMap[sym] || []).forEach(p => tsSet.add(p.t)));
-      const gridPoints = [...tsSet].sort((a, b) => a - b).map(t => ({ t }));
+      // Grid strategy:
+      // • Intraday (1d/5d): union of all tickers so the chart spans EU open
+      //   (09:00 CET) through US close (~22:00 CET) instead of being clipped
+      //   to whichever single market has more data points.
+      // • Weekly/monthly ranges: single ticker with most points. The union
+      //   approach breaks here because FX and stock timestamps can be days
+      //   apart, causing FX lookups to miss and USD positions to drop to zero,
+      //   and duplicate grid points appear for the same week/month.
+      let gridPoints;
+      if (['1d', '5d'].includes(range)) {
+        const tsSet = new Set();
+        yhTickers.forEach(sym => (priceMap[sym] || []).forEach(p => tsSet.add(p.t)));
+        gridPoints = [...tsSet].sort((a, b) => a - b).map(t => ({ t }));
+      } else {
+        gridPoints = ([...yhTickers]
+          .map(s => priceMap[s] || [])
+          .sort((a, b) => b.length - a.length)[0] || []);
+      }
 
       if (gridPoints.length < 2) { setLoading(false); setPts([]); return; }
 
