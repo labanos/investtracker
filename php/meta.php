@@ -185,6 +185,7 @@ if ($FMP_KEY !== '%%FMP_API_KEY%%' && $FMP_KEY !== '') {
                . '?symbol=' . urlencode($fmpSymbol)
                . '&apikey=' . urlencode($FMP_KEY);
     $fmp = http_get($fmpUrl);
+    if (isset($_GET['debug'])) { echo $fmp['body']; exit; }
     if ($fmp['ok'] && $fmp['body']) {
         $data = json_decode($fmp['body'], true);
         $p    = is_array($data) ? ($data[0] ?? null) : null;
