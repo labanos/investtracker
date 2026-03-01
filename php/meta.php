@@ -178,27 +178,16 @@ $fmpIndustry    = null;
 $fmpCountry     = null;
 $fmpCompanyName = null;
 
-if (isset($_GET['debug'])) {
-    echo json_encode([
-        'key_len'        => strlen($FMP_KEY),
-        'key_first3'     => substr($FMP_KEY, 0, 3),
-        'is_placeholder' => ($FMP_KEY === '%%FMP_API_KEY%%'),
-        'is_empty'       => ($FMP_KEY === ''),
-    ]); exit;
-}
-
-if ($FMP_KEY !== '%%FMP_API_KEY%%' && $FMP_KEY !== '') {
+// NOTE: Do NOT compare $FMP_KEY against the placeholder string here — the sed injection
+// replaces ALL occurrences including comparison operands, making the check always false.
+// Instead use a length check: the placeholder '%%FMP_API_KEY%%' is exactly 15 chars;
+// real API keys are longer (typically 32 chars).
+if (strlen($FMP_KEY) > 15) {
     // Strip exchange suffix for FMP (it prefers bare symbols, e.g. NOVO-B not NOVO-B.CO)
     $fmpSymbol = preg_replace('/\.[A-Z]{1,3}$/', '', $ticker);
     $fmpUrl    = 'https://financialmodelingprep.com/stable/profile'
                . '?symbol=' . urlencode($fmpSymbol)
                . '&apikey=' . urlencode($FMP_KEY);
-    $fmp = http_get($fmpUrl);
-    if (isset($_GET['debug'])) {
-        $keys = $p ? array_keys((array)$p) : [];
-        echo json_encode(['http_code' => $fmp['code'], 'keys' => $keys, 'companyName' => ($p['companyName'] ?? 'KEY_MISSING'), 'name' => ($p['name'] ?? 'KEY_MISSING')]);
-        exit;
-    }
     if ($fmp['ok'] && $fmp['body']) {
         $data = json_decode($fmp['body'], true);
         $p    = is_array($data) ? ($data[0] ?? null) : null;
