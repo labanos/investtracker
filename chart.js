@@ -441,10 +441,12 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
   // ── Build SVG ─────────────────────────────────────────────────────────────────
   let svgContent  = null;
   let periodReturn = null;
+  let periodChange = null;   // absolute value change in baseCcy
   let color       = '#16a34a';
 
   if (pts && pts.length > 1) {
-    periodReturn = (pts[pts.length - 1].value - pts[0].value) / pts[0].value * 100;
+    periodChange = pts[pts.length - 1].value - pts[0].value;
+    periodReturn = periodChange / pts[0].value * 100;
     color = periodReturn >= 0 ? '#16a34a' : '#dc2626';
 
     const minV  = Math.min(...pts.map(p => p.value));
@@ -562,9 +564,14 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
           {periodReturn != null
             ? `${periodReturn >= 0 ? '+' : ''}${periodReturn.toFixed(2)}%`
             : loading ? 'Computing…' : '—'}
+          {periodChange != null && (
+            <span style={{ fontSize: '13px', fontWeight: 500, color, marginLeft: '8px' }}>
+              {periodChange >= 0 ? '+' : '−'}{formatTooltipValue(Math.abs(periodChange))} {baseCcy}
+            </span>
+          )}
           {periodReturn != null && (
             <span style={{ fontSize: '12px', fontWeight: 400, color: '#94a3b8', marginLeft: '6px' }}>
-              {RANGES.find(r => r.value === range)?.label} return
+              {RANGES.find(r => r.value === range)?.label} change
             </span>
           )}
         </div>
