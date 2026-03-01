@@ -1954,7 +1954,7 @@ function App() {
           {/* ── History panel ── */}
           {showHistory && (
             <div className="px-4 pt-3 pb-1 bg-gray-50 border-b border-gray-100">
-              <PortfolioChart portfolioId={portfolioId} ccy={baseCcy} apiBase="https://labanos.dk" />
+              <PortfolioChart positions={withWeight} allTxns={allTxns} baseCcy={baseCcy} />
             </div>
           )}
 

@@ -261,129 +261,187 @@ const StockChart = ({ yhTicker, ccy }) => {
   );
 };
 
-// ─── PortfolioChart — portfolio total value over time ──────────────────────────
-// Uses daily snapshots stored in portfolio_history.php.
-// Props: portfolioId (int), ccy (string), apiBase (string)
+// ─── PortfolioChart — computed from price history × share counts ─────────────
+// Props: positions (enriched holdings), allTxns ({ticker: [txn]}), baseCcy
 
-const PortfolioChart = ({ portfolioId, ccy, apiBase }) => {
-  const HISTORY_API = `${apiBase}/portfolio_history.php`;
+const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
+  const WORKER = 'https://yf-proxy.labanos.workers.dev';
 
   const RANGES = [
-    { label: '1W',  days: 7    },
-    { label: '1M',  days: 30   },
-    { label: '3M',  days: 90   },
-    { label: '6M',  days: 182  },
-    { label: 'YTD', days: null },   // null = year-to-date
-    { label: '1Y',  days: 365  },
-    { label: 'ALL', days: -1   },   // -1 = all data
+    { label: '1M',  value: '1mo' },
+    { label: '3M',  value: '3mo' },
+    { label: '6M',  value: '6mo' },
+    { label: 'YTD', value: 'ytd' },
+    { label: '1Y',  value: '1y'  },
+    { label: '2Y',  value: '2y'  },
+    { label: '5Y',  value: '5y'  },
+    { label: 'MAX', value: 'max' },
   ];
 
-  const [rangeLabel, setRangeLabel] = React.useState('ALL');
-  const [allData,    setAllData]    = React.useState(null);
-  const [loading,    setLoading]    = React.useState(true);
-  const [error,      setError]      = React.useState(null);
-  const [hover,      setHover]      = React.useState(null);
-  const svgRef = React.useRef(null);
+  const [range,   setRange]   = React.useState('1y');
+  const [pts,     setPts]     = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error,   setError]   = React.useState(null);
+  const [hover,   setHover]   = React.useState(null);
+  const cacheRef = React.useRef({});   // keyed by `${range}_${baseCcy}`
+  const svgRef   = React.useRef(null);
 
-  // Fetch all snapshot data once; filter client-side per range
+  // ── Share count for a ticker on a given date ─────────────────────────────────
+  const sharesOnDate = (txns, dateStr) =>
+    (txns || []).reduce((sum, t) => {
+      if (t.date <= dateStr) sum += t.type === 'buy' ? Number(t.quantity) : -Number(t.quantity);
+      return sum;
+    }, 0);
+
+  // ── Binary-search nearest price point (within 4-day window) ─────────────────
+  const priceAt = (pricePts, ts) => {
+    if (!pricePts || pricePts.length === 0) return null;
+    let lo = 0, hi = pricePts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (pricePts[mid].t < ts) lo = mid + 1; else hi = mid;
+    }
+    const candidates = lo > 0 ? [pricePts[lo - 1], pricePts[lo]] : [pricePts[lo]];
+    const best = candidates.reduce((a, b) =>
+      Math.abs(a.t - ts) < Math.abs(b.t - ts) ? a : b);
+    return Math.abs(best.t - ts) < 86400000 * 4 ? best.c : null;
+  };
+
+  // ── Fetch + compute portfolio value series ────────────────────────────────────
   React.useEffect(() => {
-    if (!portfolioId) return;
+    if (!positions || positions.length === 0) return;
+    const cacheKey = `${range}_${baseCcy}`;
+    if (cacheRef.current[cacheKey]) { setPts(cacheRef.current[cacheKey]); return; }
+
+    // Only positions that have transactions (shares history is knowable)
+    const relevant = positions.filter(p => (allTxns[p.ticker] || []).length > 0);
+    if (relevant.length === 0) { setPts([]); return; }
+
     setLoading(true);
     setError(null);
+    setPts(null);
     setHover(null);
-    fetch(`${HISTORY_API}?id=${portfolioId}&ccy=${encodeURIComponent(ccy)}`)
-      .then(r => r.json())
-      .then(d => {
-        if (!Array.isArray(d)) throw new Error('Bad response');
-        setAllData(d);
-        setLoading(false);
-      })
-      .catch(e => { setError(e.message); setLoading(false); });
-  }, [portfolioId, ccy]);
 
-  // Filter data by selected range
-  const pts = React.useMemo(() => {
-    if (!allData || allData.length === 0) return [];
-    const sel = RANGES.find(r => r.label === rangeLabel);
-    if (!sel || sel.days === -1) return allData; // ALL
+    const yhTickers = [...new Set(relevant.map(p => p.yhTicker))];
 
-    const now = new Date();
-    let cutoff;
-    if (sel.days === null) {
-      // YTD
-      cutoff = new Date(now.getFullYear(), 0, 1);
-    } else {
-      cutoff = new Date(now);
-      cutoff.setDate(cutoff.getDate() - sel.days);
-    }
-    const cutStr = cutoff.toISOString().slice(0, 10);
-    return allData.filter(p => p.date >= cutStr);
-  }, [allData, rangeLabel]);
+    // FX symbols needed: convert each stock's ccy to baseCcy via DKK as pivot
+    const ccys = [...new Set(relevant.map(p => p.ccy))];
+    const fxSymbols = [];
+    ccys.forEach(c => { if (c !== 'DKK') fxSymbols.push(`${c}DKK=X`); });
+    if (baseCcy !== 'DKK') fxSymbols.push(`${baseCcy}DKK=X`);
+    const uniqFx = [...new Set(fxSymbols)];
 
-  // ── chart geometry ──────────────────────────────────────────────────────────
+    const fetchChart = sym =>
+      fetch(`${WORKER}/?chart=${encodeURIComponent(sym)}&range=${range}`)
+        .then(r => r.json())
+        .then(d => ({ sym, points: (d.points || []) }))
+        .catch(() => ({ sym, points: [] }));
+
+    Promise.all([...yhTickers, ...uniqFx].map(fetchChart)).then(results => {
+      const priceMap = {};
+      results.forEach(r => { priceMap[r.sym] = r.points; });
+
+      // Use the ticker with the most data points as the date grid
+      const gridPoints = [...yhTickers]
+        .map(s => priceMap[s] || [])
+        .sort((a, b) => b.length - a.length)[0] || [];
+
+      if (gridPoints.length < 2) { setLoading(false); setPts([]); return; }
+
+      const computed = gridPoints.map(gridPt => {
+        const dateStr = new Date(gridPt.t).toISOString().slice(0, 10);
+        let total = 0;
+
+        relevant.forEach(pos => {
+          const shares = sharesOnDate(allTxns[pos.ticker], dateStr);
+          if (shares <= 0) return;
+
+          const price = priceAt(priceMap[pos.yhTicker], gridPt.t);
+          if (!price) return;
+
+          // Convert to DKK, then to baseCcy
+          let valueDKK;
+          if (pos.ccy === 'DKK') {
+            valueDKK = shares * price;
+          } else {
+            const fxRate = priceAt(priceMap[`${pos.ccy}DKK=X`], gridPt.t);
+            if (!fxRate) return;
+            valueDKK = shares * price * fxRate;
+          }
+
+          if (baseCcy === 'DKK') {
+            total += valueDKK;
+          } else {
+            const baseFxRate = priceAt(priceMap[`${baseCcy}DKK=X`], gridPt.t);
+            if (!baseFxRate) return;
+            total += valueDKK / baseFxRate;
+          }
+        });
+
+        return { t: gridPt.t, value: total };
+      }).filter(p => p.value > 0);
+
+      cacheRef.current[cacheKey] = computed;
+      setPts(computed);
+      setLoading(false);
+    }).catch(e => { setError(e.message); setLoading(false); });
+  }, [range, positions, allTxns, baseCcy]);
+
+  // ── Chart geometry ────────────────────────────────────────────────────────────
   const W = 800, H = 230;
   const PAD = { t: 14, r: 72, b: 30, l: 10 };
   const chartW = W - PAD.l - PAD.r;
   const chartH = H - PAD.t - PAD.b;
 
-  // ── helpers ─────────────────────────────────────────────────────────────────
-  const formatDate = (dateStr) => {
-    const d = new Date(dateStr + 'T12:00:00');  // noon to avoid DST weirdness
-    if (rangeLabel === '1W' || rangeLabel === '1M') {
-      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    }
-    if (rangeLabel === '3M' || rangeLabel === '6M') {
-      return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
-    }
-    return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  const formatXLabel = (ts) => {
+    const d   = new Date(ts);
+    const tz  = 'Europe/Copenhagen';
+    if (['1mo','3mo'].includes(range)) return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: tz });
+    if (['6mo','ytd','1y'].includes(range)) return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: tz });
+    return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: tz });
   };
 
-  const formatValue = (v) => {
+  const formatValue = v => {
     if (v >= 1_000_000) return (v / 1_000_000).toFixed(2) + 'M';
     if (v >= 10_000)    return Math.round(v / 1000) + 'k';
     return v.toFixed(0);
   };
 
-  const formatTooltipValue = (v) => {
-    return new Intl.NumberFormat('da-DK', { maximumFractionDigits: 0 }).format(v);
-  };
+  const formatTooltipValue = v =>
+    new Intl.NumberFormat('da-DK', { maximumFractionDigits: 0 }).format(v);
 
   const clientToSVG = (clientX, clientY) => {
     const svg = svgRef.current;
     if (!svg) return null;
     try {
       const pt = svg.createSVGPoint();
-      pt.x = clientX;
-      pt.y = clientY;
+      pt.x = clientX; pt.y = clientY;
       return pt.matrixTransform(svg.getScreenCTM().inverse());
     } catch { return null; }
   };
 
-  const hitIndex = (svgX) => {
-    const relX = svgX - PAD.l;
-    return Math.max(0, Math.min(pts.length - 1, Math.round((relX / chartW) * (pts.length - 1))));
-  };
+  const hitIndex = svgX =>
+    Math.max(0, Math.min((pts||[]).length - 1,
+      Math.round(((svgX - PAD.l) / chartW) * ((pts||[]).length - 1))));
 
-  // ── build chart ──────────────────────────────────────────────────────────────
-  let svgContent = null;
+  // ── Build SVG ─────────────────────────────────────────────────────────────────
+  let svgContent  = null;
   let periodReturn = null;
-  let color = '#16a34a';
+  let color       = '#16a34a';
 
-  if (pts.length > 1) {
+  if (pts && pts.length > 1) {
     periodReturn = (pts[pts.length - 1].value - pts[0].value) / pts[0].value * 100;
     color = periodReturn >= 0 ? '#16a34a' : '#dc2626';
 
-    const minV = Math.min(...pts.map(p => p.value));
-    const maxV = Math.max(...pts.map(p => p.value));
-    // Add a little padding so the line doesn't touch the very top/bottom
-    const span = (maxV - minV) || 1;
-    const pad  = span * 0.06;
-    const lo   = minV - pad;
-    const hi   = maxV + pad;
-    const rng  = hi - lo;
+    const minV  = Math.min(...pts.map(p => p.value));
+    const maxV  = Math.max(...pts.map(p => p.value));
+    const span  = (maxV - minV) || 1;
+    const pad   = span * 0.06;
+    const lo    = minV - pad, hi = maxV + pad, rng = hi - lo;
 
-    const xScale = i  => PAD.l + (i / (pts.length - 1)) * chartW;
-    const yScale = v  => PAD.t + chartH - ((v - lo) / rng) * chartH;
+    const xScale = i => PAD.l + (i / (pts.length - 1)) * chartW;
+    const yScale = v => PAD.t + chartH - ((v - lo) / rng) * chartH;
 
     const lineD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(p.value).toFixed(1)}`).join(' ');
     const areaD = [
@@ -392,16 +450,13 @@ const PortfolioChart = ({ portfolioId, ccy, apiBase }) => {
       `L${xScale(pts.length - 1).toFixed(1)},${(PAD.t + chartH).toFixed(1)}Z`,
     ].join(' ');
 
-    // Y grid – 3 levels
     const yLevels = [maxV, (minV + maxV) / 2, minV];
 
-    // X labels – 5 evenly spaced
     const xLabels = [0, 1, 2, 3, 4].map(i => {
       const idx = Math.round(i * (pts.length - 1) / 4);
-      return { x: xScale(idx), label: formatDate(pts[idx].date), anchor: i === 0 ? 'start' : i === 4 ? 'end' : 'middle' };
+      return { x: xScale(idx), label: formatXLabel(pts[idx].t), anchor: i === 0 ? 'start' : i === 4 ? 'end' : 'middle' };
     });
 
-    // Mouse / touch handlers
     const updateHover = (clientX, clientY) => {
       const svgPt = clientToSVG(clientX, clientY);
       if (!svgPt) return;
@@ -409,16 +464,12 @@ const PortfolioChart = ({ portfolioId, ccy, apiBase }) => {
       setHover({ x: xScale(idx), y: yScale(pts[idx].value), point: pts[idx] });
     };
 
-    const handleMouseMove = (e) => updateHover(e.clientX, e.clientY);
-    const handleTouchMove = (e) => { e.preventDefault(); updateHover(e.touches[0].clientX, e.touches[0].clientY); };
-
-    // Tooltip
     let tooltip = null;
     if (hover) {
-      const d = new Date(hover.point.date + 'T12:00:00');
-      const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-
-      const tipW = 180, tipH = 54;
+      const d       = new Date(hover.point.t);
+      const tz      = 'Europe/Copenhagen';
+      const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
+      const tipW = 190, tipH = 54;
       const tipX = Math.min(hover.x + 12, PAD.l + chartW - tipW - 4);
       const tipY = Math.max(hover.y - tipH - 10, PAD.t);
 
@@ -432,55 +483,45 @@ const PortfolioChart = ({ portfolioId, ccy, apiBase }) => {
             style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.10))' }} />
           <text x={tipX + 10} y={tipY + 18} style={{ fontSize: 'clamp(10px, 1.3vw, 12px)' }} fill="#64748b">{dateStr}</text>
           <text x={tipX + 10} y={tipY + 40} style={{ fontSize: 'clamp(12px, 1.6vw, 15px)' }} fontWeight="600" fill="#0f172a">
-            {formatTooltipValue(hover.point.value)} {ccy}
+            {formatTooltipValue(hover.point.value)} {baseCcy}
           </text>
         </g>
       );
     }
 
     svgContent = (
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        width="100%"
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%"
         style={{ display: 'block', cursor: 'crosshair', touchAction: 'none' }}
-        onMouseMove={handleMouseMove}
+        onMouseMove={e => updateHover(e.clientX, e.clientY)}
         onMouseLeave={() => setHover(null)}
-        onTouchMove={handleTouchMove}
+        onTouchMove={e => { e.preventDefault(); updateHover(e.touches[0].clientX, e.touches[0].clientY); }}
         onTouchEnd={() => setHover(null)}
       >
         <defs>
-          <linearGradient id={`pg-${portfolioId}`} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="pg-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%"   stopColor={color} stopOpacity="0.20" />
             <stop offset="100%" stopColor={color} stopOpacity="0.01" />
           </linearGradient>
         </defs>
 
-        {/* Y grid lines */}
         {yLevels.map((v, i) => (
-          <line key={i}
-            x1={PAD.l} y1={yScale(v)} x2={PAD.l + chartW} y2={yScale(v)}
+          <line key={i} x1={PAD.l} y1={yScale(v)} x2={PAD.l + chartW} y2={yScale(v)}
             stroke="#f1f5f9" strokeWidth="1" />
         ))}
 
-        {/* area fill + value line */}
-        <path d={areaD} fill={`url(#pg-${portfolioId})`} />
+        <path d={areaD} fill="url(#pg-grad)" />
         <path d={lineD} fill="none" stroke={color} strokeWidth="2.5"
           strokeLinejoin="round" strokeLinecap="round" />
 
-        {/* Y axis labels (right side) */}
         {yLevels.map((v, i) => (
-          <text key={i}
-            x={PAD.l + chartW + 8} y={yScale(v) + 6}
+          <text key={i} x={PAD.l + chartW + 8} y={yScale(v) + 6}
             style={{ fontSize: 'clamp(9px, 1.4vw, 12px)' }} fill="#94a3b8" textAnchor="start">
             {formatValue(v)}
           </text>
         ))}
 
-        {/* X axis labels (bottom) */}
         {xLabels.map((xl, i) => (
-          <text key={i}
-            x={xl.x} y={PAD.t + chartH + 22}
+          <text key={i} x={xl.x} y={PAD.t + chartH + 22}
             style={{ fontSize: 'clamp(9px, 1.3vw, 12px)' }} fill="#94a3b8" textAnchor={xl.anchor}>
             {xl.label}
           </text>
@@ -491,44 +532,40 @@ const PortfolioChart = ({ portfolioId, ccy, apiBase }) => {
     );
   }
 
-  // ── render ──────────────────────────────────────────────────────────────────
-  const noData = !loading && !error && pts.length < 2;
+  // ── Render ────────────────────────────────────────────────────────────────────
+  const noData  = !loading && !error && pts !== null && pts.length < 2;
+  const noTxns  = !loading && !error && pts === null &&
+    positions.every(p => (allTxns[p.ticker] || []).length === 0);
 
   return (
-    <div style={{ background: 'white', borderRadius: '12px', padding: '16px 20px 10px', marginBottom: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+    <div style={{ background: 'white', borderRadius: '12px', padding: '16px 20px 10px',
+      marginBottom: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
 
-      {/* header: period return + range tabs */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', gap: '8px' }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, color: periodReturn != null ? color : '#64748b', flexShrink: 0 }}>
+      {/* header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: '10px', gap: '8px' }}>
+        <div style={{ fontSize: '15px', fontWeight: 600,
+          color: periodReturn != null ? color : '#64748b', flexShrink: 0 }}>
           {periodReturn != null
             ? `${periodReturn >= 0 ? '+' : ''}${periodReturn.toFixed(2)}%`
-            : loading ? 'Loading…' : noData ? 'No history yet' : error ? 'Error' : '—'}
+            : loading ? 'Computing…' : '—'}
           {periodReturn != null && (
             <span style={{ fontSize: '12px', fontWeight: 400, color: '#94a3b8', marginLeft: '6px' }}>
-              {rangeLabel} return
+              {RANGES.find(r => r.value === range)?.label} return
             </span>
           )}
         </div>
 
         {/* range tabs */}
-        <div style={{
-          display: 'flex', gap: '4px',
-          overflowX: 'auto', flexShrink: 1, minWidth: 0,
-          paddingBottom: '2px',
-          msOverflowStyle: 'none', scrollbarWidth: 'none',
-        }}>
+        <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', flexShrink: 1, minWidth: 0,
+          paddingBottom: '2px', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
           {RANGES.map(r => (
-            <button key={r.label} onClick={() => setRangeLabel(r.label)} style={{
-              flexShrink: 0,
-              padding: '3px 10px',
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: r.label === rangeLabel ? 600 : 400,
-              background: r.label === rangeLabel ? '#1e293b' : '#f1f5f9',
-              color:      r.label === rangeLabel ? 'white'   : '#64748b',
-              whiteSpace: 'nowrap',
+            <button key={r.value} onClick={() => { setRange(r.value); setHover(null); }} style={{
+              flexShrink: 0, padding: '3px 10px', borderRadius: '6px', border: 'none',
+              cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap',
+              fontWeight: r.value === range ? 600 : 400,
+              background: r.value === range ? '#1e293b' : '#f1f5f9',
+              color:      r.value === range ? 'white'   : '#64748b',
             }}>{r.label}</button>
           ))}
         </div>
@@ -538,20 +575,22 @@ const PortfolioChart = ({ portfolioId, ccy, apiBase }) => {
       <div style={{ position: 'relative', minHeight: '40px' }}>
         {loading && (
           <div style={{ padding: '30px 0', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
-            Loading history…
+            Loading price history…
           </div>
         )}
         {error && !loading && (
           <div style={{ padding: '30px 0', textAlign: 'center', color: '#ef4444', fontSize: '13px' }}>
-            Could not load portfolio history
+            Could not load price data
           </div>
         )}
-        {noData && (
+        {(noData || noTxns) && (
           <div style={{ padding: '30px 0', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
-            Portfolio history will appear here once prices have been loaded on at least two separate days.
+            {noTxns
+              ? 'Add transactions to your holdings to see portfolio history.'
+              : 'Not enough data for this period.'}
           </div>
         )}
-        {!loading && !error && !noData && svgContent}
+        {!loading && !error && svgContent}
       </div>
     </div>
   );
