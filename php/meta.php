@@ -188,6 +188,7 @@ if (strlen($FMP_KEY) > 15) {
     $fmpUrl    = 'https://financialmodelingprep.com/stable/profile'
                . '?symbol=' . urlencode($fmpSymbol)
                . '&apikey=' . urlencode($FMP_KEY);
+    $fmp = http_get($fmpUrl);
     if ($fmp['ok'] && $fmp['body']) {
         $data = json_decode($fmp['body'], true);
         $p    = is_array($data) ? ($data[0] ?? null) : null;
