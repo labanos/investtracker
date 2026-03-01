@@ -115,10 +115,12 @@ $STATIC = [
     'CSU.TO'   => ['Technology', 'Software-Application',       'Canada'],
 ];
 
+// Grab static map values if present (may still call FMP below for companyName)
+$staticSector   = null;
+$staticIndustry = null;
+$staticCountry  = null;
 if (isset($STATIC[$ticker])) {
-    [$sector, $industry, $country] = $STATIC[$ticker];
-    echo json_encode(compact('sector', 'industry', 'country'));
-    exit;
+    [$staticSector, $staticIndustry, $staticCountry] = $STATIC[$ticker];
 }
 
 // ── Shared HTTP helper ────────────────────────────────────────────────────────
@@ -169,6 +171,13 @@ function fmp_country(string $code): string {
     return $map[strtoupper($code)] ?? $code;
 }
 
+// ── 2. FMP API lookup — always called when key is set, to get companyName ─────
+// Even if static map has sector/country, FMP provides the company name.
+$fmpSector      = null;
+$fmpIndustry    = null;
+$fmpCountry     = null;
+$fmpCompanyName = null;
+
 if ($FMP_KEY !== '%%FMP_API_KEY%%' && $FMP_KEY !== '') {
     // Strip exchange suffix for FMP (it prefers bare symbols, e.g. NOVO-B not NOVO-B.CO)
     $fmpSymbol = preg_replace('/\.[A-Z]{1,3}$/', '', $ticker);
@@ -179,16 +188,25 @@ if ($FMP_KEY !== '%%FMP_API_KEY%%' && $FMP_KEY !== '') {
     if ($fmp['ok'] && $fmp['body']) {
         $data = json_decode($fmp['body'], true);
         $p    = is_array($data) ? ($data[0] ?? null) : null;
-        if ($p && (!empty($p['sector']) || !empty($p['companyName']))) {
-            echo json_encode([
-                'sector'      => $p['sector']                                     ?: null,
-                'industry'    => $p['industry']                                   ?: null,
-                'country'     => !empty($p['country']) ? fmp_country($p['country']) : null,
-                'companyName' => $p['companyName']                                ?: null,
-            ]);
-            exit;
+        if ($p) {
+            $fmpSector      = $p['sector']      ?: null;
+            $fmpIndustry    = $p['industry']    ?: null;
+            $fmpCountry     = !empty($p['country']) ? fmp_country($p['country']) : null;
+            $fmpCompanyName = $p['companyName'] ?: null;
         }
     }
+}
+
+// Merge: static map wins for sector/country/industry; FMP provides companyName
+// (and sector/country as fallback when not in static map)
+$sector      = $staticSector   ?? $fmpSector;
+$industry    = $staticIndustry ?? $fmpIndustry;
+$country     = $staticCountry  ?? $fmpCountry;
+$companyName = $fmpCompanyName;
+
+if ($sector !== null || $country !== null || $companyName !== null) {
+    echo json_encode(compact('sector', 'industry', 'country', 'companyName'));
+    exit;
 }
 
 // ── 3. Country inference from ticker exchange suffix ─────────────────────────
@@ -220,9 +238,10 @@ function infer_country(string $ticker): ?string {
 $inferredCountry = infer_country($ticker);
 if ($inferredCountry) {
     echo json_encode([
-        'sector'   => null,
-        'industry' => null,
-        'country'  => $inferredCountry,
+        'sector'      => null,
+        'industry'    => null,
+        'country'     => $inferredCountry,
+        'companyName' => null,
     ]);
     exit;
 }
