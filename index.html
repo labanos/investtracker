@@ -901,6 +901,78 @@ function AddHoldingModal({ onClose, onAdded, portfolioId }) {
   );
 }
 
+// ─── NewsPanel ─────────────────────────────────────────────────────────────
+function NewsPanel({ yhTicker }) {
+  const [news,    setNews]    = useState(null);  // null = loading
+  const [error,   setError]   = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setNews(null); setError(false);
+    fetch(`${WORKER_URL}/?news=${encodeURIComponent(yhTicker)}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setNews(d.news || []); })
+      .catch(() => { if (!cancelled) setError(true); });
+    return () => { cancelled = true; };
+  }, [yhTicker]);
+
+  const timeAgo = (unix) => {
+    const diff = Math.floor((Date.now() / 1000) - unix);
+    if (diff < 3600)  return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return Math.floor(diff / 86400) + 'd ago';
+  };
+
+  return (
+    <div className="mx-4 mb-6">
+      <h2 className="text-[13px] font-semibold text-gray-600 uppercase tracking-wide mb-2">News</h2>
+
+      {news === null && !error && (
+        <div className="flex items-center gap-2 text-gray-400 text-[13px] py-4">
+          <svg className="spin w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+          </svg>
+          Loading news…
+        </div>
+      )}
+
+      {error && (
+        <div className="text-[13px] text-gray-400 py-4">Could not load news.</div>
+      )}
+
+      {news && news.length === 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-6 text-center text-gray-400 text-sm">
+          No recent news found.
+        </div>
+      )}
+
+      {news && news.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {news.map((item, i) => (
+            <a key={i} href={item.link} target="_blank" rel="noopener noreferrer"
+              className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex gap-3 items-start hover:bg-gray-50 transition-colors group">
+              {item.thumbnail && (
+                <img src={item.thumbnail} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0 mt-0.5 bg-gray-100" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] text-gray-800 font-medium leading-snug group-hover:text-blue-700 transition-colors line-clamp-2">
+                  {item.title}
+                </p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-[11px] text-gray-400">{item.publisher}</span>
+                  <span className="text-gray-300 text-[10px]">·</span>
+                  <span className="text-[11px] text-gray-400 mono">{timeAgo(item.time)}</span>
+                </div>
+              </div>
+              <span className="text-gray-300 group-hover:text-gray-400 text-[14px] shrink-0 mt-0.5 transition-colors">↗</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Detail Page ───────────────────────────────────────────────────────────
 function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveHolding, user, onRequireLogin, portfolioId, isLive, lastUpdated, baseCcy }) {
 
@@ -1120,6 +1192,9 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
       <div className="mx-4 mb-2">
         <StockChart yhTicker={p.yhTicker} ccy={p.ccy} />
       </div>
+
+      {/* ── News ── */}
+      <NewsPanel yhTicker={p.yhTicker} />
 
       {/* ── Transactions ── */}
       <div className="mx-4 mb-6">

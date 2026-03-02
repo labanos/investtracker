@@ -13,6 +13,26 @@ export default {
       });
     }
 
+    // News endpoint: ?news=<symbol>
+    const newsSymbol = url.searchParams.get('news');
+    if (newsSymbol) {
+      const yfUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(newsSymbol)}&quotesCount=0&newsCount=10&listsCount=0`;
+      const res  = await fetch(yfUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      });
+      const data = await res.json();
+      const news = (data?.news || []).map(n => ({
+        title:     n.title,
+        publisher: n.publisher,
+        time:      n.providerPublishTime,
+        link:      n.link,
+        thumbnail: n.thumbnail?.resolutions?.[0]?.url ?? null,
+      }));
+      return new Response(JSON.stringify({ news }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
     // Search endpoint: ?search=<query>
     const searchQ = url.searchParams.get('search');
     if (searchQ) {
