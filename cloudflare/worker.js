@@ -68,14 +68,24 @@ export default {
         const meta       = result?.meta;
         if (!meta) return null;
         const price        = meta.regularMarketPrice ?? null;
-        // Use the last non-null close from the candles array as prevClose.
-        // This gives us the most recent completed trading day's close (e.g. last Friday
-        // on a Monday), which is what we want for day-over-day change.
-        // meta.chartPreviousClose is the close *before* the 5d window (6+ days ago)
-        // and is therefore wrong for this purpose.
+        // Find the most recent close that is NOT from today in CET.
+        // - If today's candle is present (most tickers): skip it because its close ≈
+        //   regularMarketPrice, giving ~0% change. Use the previous day's close instead.
+        // - If today's candle is absent (e.g. NOVO-B.CO / NU on Mondays before Yahoo
+        //   catches up): the last candle is already the previous trading day — use it.
+        // meta.chartPreviousClose is the close before the 5d window and is too old.
+        const timestamps   = result?.timestamp ?? [];
         const closes       = result?.indicators?.quote?.[0]?.close ?? [];
-        const lastClose    = closes.filter(c => c != null).slice(-1)[0] ?? null;
-        const prevClose    = lastClose ?? meta.chartPreviousClose ?? meta.previousClose ?? null;
+        const fmtDate      = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Copenhagen' });
+        const today        = fmtDate.format(new Date());
+        let prevClose = null;
+        for (let i = timestamps.length - 1; i >= 0; i--) {
+          if (closes[i] != null && fmtDate.format(new Date(timestamps[i] * 1000)) !== today) {
+            prevClose = closes[i];
+            break;
+          }
+        }
+        prevClose = prevClose ?? meta.chartPreviousClose ?? meta.previousClose ?? null;
         const changePercent = (prevClose && price != null)
           ? ((price - prevClose) / prevClose) * 100
           : 0;
