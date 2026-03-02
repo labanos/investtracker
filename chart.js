@@ -320,6 +320,19 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
     return Math.abs(best.t - ts) < PRICE_WIN ? best.c : null;
   };
 
+  // Returns the most recent price at-or-before ts (or the earliest available).
+  // Used as a fallback for tickers that have no intraday data in the current
+  // range window (e.g. a European stock that closed >24 h ago during US hours).
+  const lastKnownPrice = (pricePts, ts) => {
+    if (!pricePts || pricePts.length === 0) return null;
+    let last = null;
+    for (let i = 0; i < pricePts.length; i++) {
+      if (pricePts[i].t <= ts) last = pricePts[i].c;
+      else break;
+    }
+    return last ?? pricePts[0].c;
+  };
+
   // ── Fetch + compute portfolio value series ────────────────────────────────────
   React.useEffect(() => {
     if (!positions || positions.length === 0) return;
@@ -390,7 +403,9 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
           const shares = sharesOnDate(allTxns[pos.ticker], dateStr);
           if (shares <= 0) return;
 
-          const price = priceAt(priceMap[pos.yhTicker], gridPt.t);
+          const price = priceAt(priceMap[pos.yhTicker], gridPt.t)
+            ?? lastKnownPrice(priceMap[pos.yhTicker], gridPt.t)
+            ?? pos.price;
           if (!price) return;
 
           // Convert to DKK, then to baseCcy
@@ -398,7 +413,8 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
           if (pos.ccy === 'DKK') {
             valueDKK = shares * price;
           } else {
-            const fxRate = priceAt(priceMap[`${pos.ccy}DKK=X`], gridPt.t);
+            const fxRate = priceAt(priceMap[`${pos.ccy}DKK=X`], gridPt.t)
+              ?? lastKnownPrice(priceMap[`${pos.ccy}DKK=X`], gridPt.t);
             if (!fxRate) return;
             valueDKK = shares * price * fxRate;
           }
@@ -406,7 +422,8 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
           if (baseCcy === 'DKK') {
             total += valueDKK;
           } else {
-            const baseFxRate = priceAt(priceMap[`${baseCcy}DKK=X`], gridPt.t);
+            const baseFxRate = priceAt(priceMap[`${baseCcy}DKK=X`], gridPt.t)
+              ?? lastKnownPrice(priceMap[`${baseCcy}DKK=X`], gridPt.t);
             if (!baseFxRate) return;
             total += valueDKK / baseFxRate;
           }
