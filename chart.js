@@ -16,12 +16,23 @@ const StockChart = ({ yhTicker, ccy }) => {
     { label: 'MAX', value: 'max' },
   ];
 
-  const [range, setRange]   = React.useState('3mo');
-  const [data,  setData]    = React.useState(null);
+  const [range, setRange]     = React.useState('3mo');
+  const [data,  setData]      = React.useState(null);
   const [loading, setLoading] = React.useState(true);
-  const [error,  setError]  = React.useState(null);
-  const [hover,  setHover]  = React.useState(null);
-  const svgRef = React.useRef(null);
+  const [error,  setError]    = React.useState(null);
+  const [hover,  setHover]    = React.useState(null);
+  const svgRef       = React.useRef(null);
+  const containerRef = React.useRef(null);
+  const [containerW, setContainerW] = React.useState(800);
+
+  // Track actual rendered width so we can keep fonts/strokes at consistent physical sizes
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setContainerW(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   React.useEffect(() => {
     setLoading(true);
@@ -44,6 +55,10 @@ const StockChart = ({ yhTicker, ccy }) => {
   const PAD = { t: 14, r: 62, b: 30, l: 10 };
   const chartW = W - PAD.l - PAD.r;   // 728
   const chartH = H - PAD.t - PAD.b;   // 186
+
+  // Scale factor: SVG user units → screen pixels.
+  // Fonts and strokes are divided/multiplied by this to stay at consistent physical sizes.
+  const svgScale = containerW > 0 ? containerW / W : 1;
 
   // ── helpers ─────────────────────────────────────────────────────────────────
   const formatXLabel = (ts) => {
@@ -84,6 +99,12 @@ const StockChart = ({ yhTicker, ccy }) => {
   let svgContent = null;
   let periodReturn = null;
   let color = '#16a34a';
+
+  // Font sizes in SVG user units that produce consistent physical pixel sizes.
+  // Dividing by svgScale converts from screen-px target to SVG user units.
+  const labelSz   = (11 / svgScale).toFixed(2);  // axis tick labels  (~11px visual)
+  const tipDateSz = (11 / svgScale).toFixed(2);  // tooltip date line (~11px visual)
+  const tipValSz  = (13 / svgScale).toFixed(2);  // tooltip value line (~13px visual)
 
   if (data && data.points && data.points.length > 1) {
     const pts   = data.points;
@@ -138,20 +159,24 @@ const StockChart = ({ yhTicker, ccy }) => {
           + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz })
         : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
 
-      const tipW = 170, tipH = 54;
-      const tipX = Math.min(hover.x + 12, PAD.l + chartW - tipW - 4);
-      const tipY = Math.max(hover.y - tipH - 10, PAD.t);
+      const tipW = 170 / svgScale, tipH = 54 / svgScale;
+      const tipX = Math.min(hover.x + 12 / svgScale, PAD.l + chartW - tipW - 4 / svgScale);
+      const tipY = Math.max(hover.y - tipH - 10 / svgScale, PAD.t);
 
       tooltip = (
         <g>
           <line x1={hover.x} y1={PAD.t} x2={hover.x} y2={PAD.t + chartH}
-            stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="4,3" />
-          <circle cx={hover.x} cy={hover.y} r="5" fill={color} stroke="white" strokeWidth="2.5" />
-          <rect x={tipX} y={tipY} width={tipW} height={tipH} rx="5"
-            fill="white" stroke="#e2e8f0" strokeWidth="1"
+            stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4,3"
+            vectorEffect="non-scaling-stroke" />
+          <circle cx={hover.x} cy={hover.y} r={4 / svgScale} fill={color} stroke="white"
+            strokeWidth="2" vectorEffect="non-scaling-stroke" />
+          <rect x={tipX} y={tipY} width={tipW} height={tipH} rx={5 / svgScale}
+            fill="white" stroke="#e2e8f0" strokeWidth="1" vectorEffect="non-scaling-stroke"
             style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.10))' }} />
-          <text x={tipX + 10} y={tipY + 18} style={{ fontSize: 'clamp(10px, 1.3vw, 12px)' }} fill="#64748b">{dateStr}</text>
-          <text x={tipX + 10} y={tipY + 40} style={{ fontSize: 'clamp(12px, 1.6vw, 15px)' }} fontWeight="600" fill="#0f172a">
+          <text x={tipX + 10 / svgScale} y={tipY + 18 / svgScale}
+            fontSize={tipDateSz} fill="#64748b">{dateStr}</text>
+          <text x={tipX + 10 / svgScale} y={tipY + 38 / svgScale}
+            fontSize={tipValSz} fontWeight="600" fill="#0f172a">
             {ccy} {hover.point.c.toFixed(2)}
           </text>
         </g>
@@ -180,19 +205,20 @@ const StockChart = ({ yhTicker, ccy }) => {
         {yLevels.map((v, i) => (
           <line key={i}
             x1={PAD.l} y1={yScale(v)} x2={PAD.l + chartW} y2={yScale(v)}
-            stroke="#f1f5f9" strokeWidth="1" />
+            stroke="#f1f5f9" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         ))}
 
         {/* area fill + price line */}
         <path d={areaD} fill={`url(#sg-${yhTicker})`} />
-        <path d={lineD} fill="none" stroke={color} strokeWidth="2.5"
-          strokeLinejoin="round" strokeLinecap="round" />
+        <path d={lineD} fill="none" stroke={color} strokeWidth="1.5"
+          strokeLinejoin="round" strokeLinecap="round"
+          vectorEffect="non-scaling-stroke" />
 
         {/* Y axis labels (right side) */}
         {yLevels.map((v, i) => (
           <text key={i}
-            x={PAD.l + chartW + 8} y={yScale(v) + 6}
-            style={{ fontSize: 'clamp(9px, 1.4vw, 12px)' }} fill="#94a3b8" textAnchor="start">
+            x={PAD.l + chartW + 8} y={yScale(v) + 4}
+            fontSize={labelSz} fill="#94a3b8" textAnchor="start">
             {formatPrice(v)}
           </text>
         ))}
@@ -200,8 +226,8 @@ const StockChart = ({ yhTicker, ccy }) => {
         {/* X axis labels (bottom) */}
         {xLabels.map((xl, i) => (
           <text key={i}
-            x={xl.x} y={PAD.t + chartH + 22}
-            style={{ fontSize: 'clamp(9px, 1.3vw, 12px)' }} fill="#94a3b8" textAnchor={xl.anchor}>
+            x={xl.x} y={PAD.t + chartH + 20}
+            fontSize={labelSz} fill="#94a3b8" textAnchor={xl.anchor}>
             {xl.label}
           </text>
         ))}
@@ -213,7 +239,7 @@ const StockChart = ({ yhTicker, ccy }) => {
 
   // ── render ───────────────────────────────────────────────────────────────────
   return (
-    <div style={{ background: 'white', borderRadius: '12px', padding: '16px 20px 10px', marginBottom: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+    <div ref={containerRef} style={{ background: 'white', borderRadius: '12px', padding: '16px 20px 10px', marginBottom: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
 
       {/* header: period return + scrollable range tabs */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', gap: '8px' }}>
@@ -294,8 +320,19 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
   const [loading, setLoading] = React.useState(false);
   const [error,   setError]   = React.useState(null);
   const [hover,   setHover]   = React.useState(null);
-  const cacheRef = React.useRef({});   // keyed by `${range}_${baseCcy}`
-  const svgRef   = React.useRef(null);
+  const cacheRef     = React.useRef({});
+  const svgRef       = React.useRef(null);
+  const containerRef = React.useRef(null);
+  const [containerW, setContainerW] = React.useState(800);
+
+  // Track actual rendered width
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setContainerW(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // ── Share count for a ticker on a given date ─────────────────────────────────
   const sharesOnDate = (txns, dateStr) =>
@@ -324,8 +361,6 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
   };
 
   // Returns the most recent price at-or-before ts (or the earliest available).
-  // Used as a fallback for tickers that have no intraday data in the current
-  // range window (e.g. a European stock that closed >24 h ago during US hours).
   const lastKnownPrice = (pricePts, ts) => {
     if (!pricePts || pricePts.length === 0) return null;
     let last = null;
@@ -342,7 +377,6 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
     const cacheKey = `${range}_${baseCcy}`;
     if (cacheRef.current[cacheKey]) { setPts(cacheRef.current[cacheKey]); return; }
 
-    // Only positions that have transactions (shares history is knowable)
     const relevant = positions.filter(p => (allTxns[p.ticker] || []).length > 0);
     if (relevant.length === 0) { setPts([]); return; }
 
@@ -353,14 +387,12 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
 
     const yhTickers = [...new Set(relevant.map(p => p.yhTicker))];
 
-    // FX symbols needed: convert each stock's ccy to baseCcy via DKK as pivot
     const ccys = [...new Set(relevant.map(p => p.ccy))];
     const fxSymbols = [];
     ccys.forEach(c => { if (c !== 'DKK') fxSymbols.push(`${c}DKK=X`); });
     if (baseCcy !== 'DKK') fxSymbols.push(`${baseCcy}DKK=X`);
     const uniqFx = [...new Set(fxSymbols)];
 
-    // Yahoo Finance returns timestamps in Unix SECONDS; normalise to ms for Date()
     const toMs = t => t < 1e12 ? t * 1000 : t;
 
     const fetchChart = sym =>
@@ -377,14 +409,6 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
       const priceMap = {};
       results.forEach(r => { priceMap[r.sym] = r.points; });
 
-      // Grid strategy:
-      // • Intraday (1d/5d): union of all tickers so the chart spans EU open
-      //   (09:00 CET) through US close (~22:00 CET) instead of being clipped
-      //   to whichever single market has more data points.
-      // • Weekly/monthly ranges: single ticker with most points. The union
-      //   approach breaks here because FX and stock timestamps can be days
-      //   apart, causing FX lookups to miss and USD positions to drop to zero,
-      //   and duplicate grid points appear for the same week/month.
       let gridPoints;
       if (['1d', '5d'].includes(range)) {
         const tsSet = new Set();
@@ -411,7 +435,6 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
             ?? pos.price;
           if (!price) return;
 
-          // Convert to DKK, then to baseCcy
           let valueDKK;
           if (pos.ccy === 'DKK') {
             valueDKK = shares * price;
@@ -446,6 +469,11 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
   const PAD = { t: 14, r: 72, b: 30, l: 10 };
   const chartW = W - PAD.l - PAD.r;
   const chartH = H - PAD.t - PAD.b;
+
+  const svgScale = containerW > 0 ? containerW / W : 1;
+  const labelSz   = (11 / svgScale).toFixed(2);
+  const tipDateSz = (11 / svgScale).toFixed(2);
+  const tipValSz  = (13 / svgScale).toFixed(2);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   const formatXLabel = (ts) => {
@@ -484,19 +512,15 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
   // ── Build SVG ─────────────────────────────────────────────────────────────────
   let svgContent  = null;
   let periodReturn = null;
-  let periodChange = null;   // absolute value change in baseCcy
+  let periodChange = null;
   let color       = '#16a34a';
 
   if (pts && pts.length > 1) {
-    // For 1D, base the change on the previous-close portfolio value so the label
-    // reads "change from last close" (same as a standard broker view), not
-    // "change from today's open".  Derive prevClose per position from chgPct.
     let baseValue = pts[0].value;
     if (range === '1d' && positions && positions.length > 0) {
       let ref = 0;
       positions.forEach(pos => {
         if (!pos.shares || pos.shares <= 0 || !pos.price || !pos.fxToBase) return;
-        // chgPct is decimal (e.g. -0.0195 = -1.95%); prevClose = price / (1 + chgPct)
         const prevPrice = pos.chgPct ? pos.price / (1 + pos.chgPct) : pos.price;
         ref += pos.shares * prevPrice * pos.fxToBase;
       });
@@ -546,20 +570,25 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
         ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz })
           + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz })
         : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
-      const tipW = 190, tipH = 54;
-      const tipX = Math.min(hover.x + 12, PAD.l + chartW - tipW - 4);
-      const tipY = Math.max(hover.y - tipH - 10, PAD.t);
+
+      const tipW = 190 / svgScale, tipH = 54 / svgScale;
+      const tipX = Math.min(hover.x + 12 / svgScale, PAD.l + chartW - tipW - 4 / svgScale);
+      const tipY = Math.max(hover.y - tipH - 10 / svgScale, PAD.t);
 
       tooltip = (
         <g>
           <line x1={hover.x} y1={PAD.t} x2={hover.x} y2={PAD.t + chartH}
-            stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="4,3" />
-          <circle cx={hover.x} cy={hover.y} r="5" fill={color} stroke="white" strokeWidth="2.5" />
-          <rect x={tipX} y={tipY} width={tipW} height={tipH} rx="5"
-            fill="white" stroke="#e2e8f0" strokeWidth="1"
+            stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4,3"
+            vectorEffect="non-scaling-stroke" />
+          <circle cx={hover.x} cy={hover.y} r={4 / svgScale} fill={color} stroke="white"
+            strokeWidth="2" vectorEffect="non-scaling-stroke" />
+          <rect x={tipX} y={tipY} width={tipW} height={tipH} rx={5 / svgScale}
+            fill="white" stroke="#e2e8f0" strokeWidth="1" vectorEffect="non-scaling-stroke"
             style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.10))' }} />
-          <text x={tipX + 10} y={tipY + 18} style={{ fontSize: 'clamp(10px, 1.3vw, 12px)' }} fill="#64748b">{dateStr}</text>
-          <text x={tipX + 10} y={tipY + 40} style={{ fontSize: 'clamp(12px, 1.6vw, 15px)' }} fontWeight="600" fill="#0f172a">
+          <text x={tipX + 10 / svgScale} y={tipY + 18 / svgScale}
+            fontSize={tipDateSz} fill="#64748b">{dateStr}</text>
+          <text x={tipX + 10 / svgScale} y={tipY + 38 / svgScale}
+            fontSize={tipValSz} fontWeight="600" fill="#0f172a">
             {formatTooltipValue(hover.point.value)} {baseCcy}
           </text>
         </g>
@@ -583,23 +612,24 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
 
         {yLevels.map((v, i) => (
           <line key={i} x1={PAD.l} y1={yScale(v)} x2={PAD.l + chartW} y2={yScale(v)}
-            stroke="#f1f5f9" strokeWidth="1" />
+            stroke="#f1f5f9" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         ))}
 
         <path d={areaD} fill="url(#pg-grad)" />
-        <path d={lineD} fill="none" stroke={color} strokeWidth="2.5"
-          strokeLinejoin="round" strokeLinecap="round" />
+        <path d={lineD} fill="none" stroke={color} strokeWidth="1.5"
+          strokeLinejoin="round" strokeLinecap="round"
+          vectorEffect="non-scaling-stroke" />
 
         {yLevels.map((v, i) => (
-          <text key={i} x={PAD.l + chartW + 8} y={yScale(v) + 6}
-            style={{ fontSize: 'clamp(9px, 1.4vw, 12px)' }} fill="#94a3b8" textAnchor="start">
+          <text key={i} x={PAD.l + chartW + 8} y={yScale(v) + 4}
+            fontSize={labelSz} fill="#94a3b8" textAnchor="start">
             {formatValue(v)}
           </text>
         ))}
 
         {xLabels.map((xl, i) => (
-          <text key={i} x={xl.x} y={PAD.t + chartH + 22}
-            style={{ fontSize: 'clamp(9px, 1.3vw, 12px)' }} fill="#94a3b8" textAnchor={xl.anchor}>
+          <text key={i} x={xl.x} y={PAD.t + chartH + 20}
+            fontSize={labelSz} fill="#94a3b8" textAnchor={xl.anchor}>
             {xl.label}
           </text>
         ))}
@@ -615,7 +645,7 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
     positions.every(p => (allTxns[p.ticker] || []).length === 0);
 
   return (
-    <div style={{ background: 'white', borderRadius: '12px', padding: '16px 20px 10px',
+    <div ref={containerRef} style={{ background: 'white', borderRadius: '12px', padding: '16px 20px 10px',
       marginBottom: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
 
       {/* header — stacked: change info row, then range chips row */}
