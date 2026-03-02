@@ -42,7 +42,9 @@ export default {
       const closes     = result.indicators?.quote?.[0]?.close ?? [];
       const currency   = result.meta?.currency ?? null;
       const points = timestamps.map((t, i) => ({ t, c: closes[i] ?? null })).filter(p => p.c !== null);
-      return new Response(JSON.stringify({ symbol: chart, currency, points }), {
+      // Include previous close so the frontend can base 1D change on last close, not open
+      const prevClose = result.meta?.chartPreviousClose ?? null;
+      return new Response(JSON.stringify({ symbol: chart, currency, points, prevClose }), {
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }

@@ -87,11 +87,14 @@ const StockChart = ({ yhTicker, ccy }) => {
 
   if (data && data.points && data.points.length > 1) {
     const pts   = data.points;
-    periodReturn = (pts[pts.length - 1].c - pts[0].c) / pts[0].c * 100;
+    // For 1D, use chartPreviousClose (last session's close) as the base so the
+    // return label reads "change from last close", not "change from today's open".
+    const baseC = (range === '1d' && data.prevClose) ? data.prevClose : pts[0].c;
+    periodReturn = (pts[pts.length - 1].c - baseC) / baseC * 100;
     color = periodReturn >= 0 ? '#16a34a' : '#dc2626';
 
-    const minC = Math.min(...pts.map(p => p.c));
-    const maxC = Math.max(...pts.map(p => p.c));
+    const minC = Math.min(baseC, ...pts.map(p => p.c));
+    const maxC = Math.max(baseC, ...pts.map(p => p.c));
     const span = maxC - minC || 1;
 
     const xScale = i => PAD.l + (i / (pts.length - 1)) * chartW;
