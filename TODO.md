@@ -4,7 +4,7 @@
 
 ## 🔖 Backlog
 
-- [ ] **Ticker search / autocomplete** — In the Add Holding modal, use Yahoo Finance's search API (`https://query2.finance.yahoo.com/v1/finance/search?q=...`) to auto-fill ticker, company name and Yahoo Finance symbol from a text search, removing the need to know the exact ticker.
+- [x] **Ticker search / autocomplete** — In the Add Holding modal, use Yahoo Finance's search API (proxied via Cloudflare Worker `?search=...`) to auto-fill ticker, company name and Yahoo Finance symbol from a text search, removing the need to know the exact ticker.
 
 - [ ] **Historic returns on closed positions** — On the detail page for a zero-share holding, show realised P&L, total holding period, and annualised return.
 

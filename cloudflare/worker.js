@@ -13,6 +13,28 @@ export default {
       });
     }
 
+    // Search endpoint: ?search=<query>
+    const searchQ = url.searchParams.get('search');
+    if (searchQ) {
+      const yfUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchQ)}&quotesCount=8&newsCount=0&listsCount=0`;
+      const res  = await fetch(yfUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      });
+      const data = await res.json();
+      const quotes = (data?.quotes || [])
+        .filter(q => q.isYahooFinance && ['EQUITY', 'ETF', 'MUTUALFUND'].includes(q.quoteType))
+        .slice(0, 8)
+        .map(q => ({
+          symbol:   q.symbol,
+          name:     q.shortname || q.longname || q.symbol,
+          exchange: q.exchDisp  || q.exchange  || '',
+          type:     q.typeDisp  || q.quoteType || '',
+        }));
+      return new Response(JSON.stringify({ quotes }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
     // Chart endpoint: ?chart=SYMBOL&range=...
     const chart = url.searchParams.get('chart');
     if (chart) {

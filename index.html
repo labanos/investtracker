@@ -25,7 +25,7 @@
 <div id="root"></div>
 <script type="text/babel">
 
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useRef } = React;
 
 // ─── Portfolio seed data (one-time migration to DB on first load) ─────────
 // yhTicker = Yahoo Finance symbol | cachedPrice/cachedChg = offline fallback
@@ -371,6 +371,24 @@ function NoteForm({ form, onChange, onSave, onCancel, saving, error, textareaRef
   );
 }
 
+// ─── AddHoldingModal helpers ───────────────────────────────────────────────
+const WORKER_URL = 'https://yf-proxy.labanos.workers.dev';
+
+// Map Yahoo Finance exchange display names → ISO currency code
+const EXCHANGE_CCY = {
+  'NasdaqGS': 'USD', 'NYSE': 'USD', 'NasdaqCM': 'USD', 'Nasdaq': 'USD',
+  'NYSEArca': 'USD', 'BATS': 'USD',
+  'Copenhagen': 'DKK',
+  'XETRA': 'EUR', 'Frankfurt': 'EUR', 'Euronext': 'EUR', 'Amsterdam': 'EUR', 'Paris': 'EUR',
+  'Toronto': 'CAD', 'TSX': 'CAD',
+  'LSE': 'GBP', 'London': 'GBP',
+  'Stockholm': 'SEK',
+  'Oslo': 'NOK',
+};
+
+// Strip trailing exchange suffix from Yahoo symbol (e.g. NOVO-B.CO → NOVO-B)
+const deriveTicker = sym => sym.replace(/\.[A-Z]{1,2}$/, '');
+
 // ─── AddHoldingModal ───────────────────────────────────────────────────────
 // ─── Portfolio Switcher ────────────────────────────────────────────────────
 function PortfolioSwitcher({ portfolios, portfolioId, onSwitch, onCreateNew, onCcyChange, user }) {
@@ -596,6 +614,17 @@ function SetupModal({ onComplete }) {
 
 function AddHoldingModal({ onClose, onAdded, portfolioId }) {
   const today = new Date().toISOString().split('T')[0];
+
+  // ── Search state ─────────────────────────────────────────────────────────
+  const [query,        setQuery]        = useState('');
+  const [results,      setResults]      = useState([]);
+  const [searching,    setSearching]    = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selected,     setSelected]     = useState(null); // { symbol, name, exchange, type }
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const searchRef = useRef(null);
+
+  // ── Form state ───────────────────────────────────────────────────────────
   const [form, setForm] = useState({
     ticker: '', yhTicker: '', company: '', ccy: 'USD',
     date: today, type: 'buy', shares: '', price: '', fees: '0', note: '',
@@ -605,6 +634,57 @@ function AddHoldingModal({ onClose, onAdded, portfolioId }) {
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
+  // ── Debounced search ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!query.trim() || selected) return;
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res  = await fetch(`${WORKER_URL}/?search=${encodeURIComponent(query.trim())}`);
+        const data = await res.json();
+        setResults(data.quotes || []);
+        setShowDropdown(true);
+      } catch (_) { setResults([]); }
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, selected]);
+
+  // ── Close dropdown on outside click ─────────────────────────────────────
+  useEffect(() => {
+    const handler = e => {
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // ── Select a search result ───────────────────────────────────────────────
+  const selectResult = r => {
+    const ccy = EXCHANGE_CCY[r.exchange] || 'USD';
+    setSelected(r);
+    setForm(f => ({
+      ...f,
+      yhTicker: r.symbol,
+      ticker:   deriveTicker(r.symbol),
+      company:  r.name,
+      ccy,
+    }));
+    setQuery('');
+    setShowDropdown(false);
+    setResults([]);
+  };
+
+  // ── Clear selection ──────────────────────────────────────────────────────
+  const clearSelection = () => {
+    setSelected(null);
+    setForm(f => ({ ...f, ticker: '', yhTicker: '', company: '', ccy: 'USD' }));
+    setShowAdvanced(false);
+  };
+
+  // ── Save ─────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     const ticker = form.ticker.trim().toUpperCase();
     if (!ticker || !form.company.trim() || !form.shares || !form.price) {
@@ -658,92 +738,163 @@ function AddHoldingModal({ onClose, onAdded, portfolioId }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none px-1">✕</button>
         </div>
 
-        {/* Ticker + Currency */}
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          <div>
-            <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Ticker *</label>
-            <input type="text" value={form.ticker}
-              onChange={e => set('ticker', e.target.value.toUpperCase())}
-              placeholder="e.g. AAPL"
-              className="w-full text-[13px] font-semibold border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 uppercase" />
+        {/* ── Ticker search ── */}
+        {!selected ? (
+          <div ref={searchRef} className="relative mb-4">
+            <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Search ticker or company *</label>
+            <div className="relative">
+              <input
+                autoFocus
+                type="text"
+                value={query}
+                onChange={e => { setQuery(e.target.value); if (!e.target.value.trim()) { setResults([]); setShowDropdown(false); } }}
+                onFocus={() => results.length > 0 && setShowDropdown(true)}
+                placeholder="e.g. Apple, NOVO-B, CSU…"
+                className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-2 pr-8 outline-none focus:border-blue-300"
+              />
+              {searching && (
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px]">
+                  <svg className="spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                  </svg>
+                </span>
+              )}
+            </div>
+            {showDropdown && results.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                {results.map(r => (
+                  <button key={r.symbol}
+                    onMouseDown={e => { e.preventDefault(); selectResult(r); }}
+                    className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center justify-between border-b border-gray-50 last:border-0">
+                    <div>
+                      <span className="text-[13px] font-semibold text-gray-900 mono">{r.symbol}</span>
+                      <span className="text-[12px] text-gray-500 ml-2 truncate">{r.name}</span>
+                    </div>
+                    <div className="text-right shrink-0 ml-2">
+                      <span className="text-[10px] text-gray-400 block">{r.exchange}</span>
+                      <span className="text-[10px] text-gray-300">{r.type}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div>
+        ) : (
+          /* ── Selected ticker chip ── */
+          <div className="mb-4">
+            <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Ticker</label>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex-1">
+                <span className="text-[13px] font-bold text-emerald-700 mono">{selected.symbol}</span>
+                <span className="text-[12px] text-gray-600 truncate">{selected.name}</span>
+                <span className="text-[10px] text-gray-400 ml-auto shrink-0">{selected.exchange}</span>
+              </div>
+              <button onClick={clearSelection}
+                className="text-gray-400 hover:text-red-500 text-[16px] px-1 py-1 transition-colors"
+                title="Clear selection">✕</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Currency (shown once ticker selected) ── */}
+        {selected && (
+          <div className="mb-3">
             <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Currency *</label>
             <select value={form.ccy} onChange={e => set('ccy', e.target.value)}
               className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 bg-white">
               {['USD','DKK','EUR','CAD','GBP','SEK','NOK'].map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
-        </div>
+        )}
 
-        {/* Company */}
-        <div className="mb-3">
-          <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Company Name *</label>
-          <input type="text" value={form.company} onChange={e => set('company', e.target.value)}
-            placeholder="e.g. Apple Inc."
-            className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300" />
-        </div>
+        {/* ── Advanced override (shown once ticker selected) ── */}
+        {selected && (
+          <div className="mb-4">
+            <button onClick={() => setShowAdvanced(v => !v)}
+              className="text-[11px] text-blue-500 hover:text-blue-700 flex items-center gap-1">
+              <span>{showAdvanced ? '▾' : '▸'}</span>
+              <span>Advanced (override ticker / company name)</span>
+            </button>
+            {showAdvanced && (
+              <div className="mt-2 space-y-2 bg-gray-50 rounded-xl p-3">
+                <div>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Internal Ticker</label>
+                  <input type="text" value={form.ticker}
+                    onChange={e => set('ticker', e.target.value.toUpperCase())}
+                    className="w-full text-[13px] font-semibold border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 uppercase bg-white" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Yahoo Finance Symbol</label>
+                  <input type="text" value={form.yhTicker}
+                    onChange={e => set('yhTicker', e.target.value)}
+                    className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 mono bg-white" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Company Name</label>
+                  <input type="text" value={form.company}
+                    onChange={e => set('company', e.target.value)}
+                    className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 bg-white" />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
-        {/* Yahoo Finance ticker */}
-        <div className="mb-4">
-          <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Yahoo Finance Ticker</label>
-          <input type="text" value={form.yhTicker} onChange={e => set('yhTicker', e.target.value)}
-            placeholder={form.ticker || 'Leave blank if same as ticker'}
-            className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 mono" />
-          <p className="text-[10px] text-gray-400 mt-1">e.g. NOVO-B.CO for Danish, CSU.TO for TSX, CHG.DE for Xetra</p>
-        </div>
+        {/* ── Opening transaction (only shown once ticker selected) ── */}
+        {selected && (
+          <div className="border-t border-gray-100 pt-4 mb-3">
+            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Opening Transaction</div>
 
-        {/* Opening transaction */}
-        <div className="border-t border-gray-100 pt-4 mb-3">
-          <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Opening Transaction</div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Date *</label>
+                <input type="date" value={form.date} onChange={e => set('date', e.target.value)}
+                  className="w-full text-[12px] border border-gray-200 rounded-lg px-2 py-2 outline-none focus:border-blue-300" />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Type</label>
+                <div className="flex gap-1">
+                  {['buy','sell'].map(t => (
+                    <button key={t} onClick={() => set('type', t)}
+                      className={`flex-1 text-[11px] font-semibold py-2 rounded-lg border transition-colors ${
+                        form.type === t
+                          ? t === 'buy' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-red-500 text-white border-red-500'
+                          : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                      }`}>{t.toUpperCase()}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {[['Shares *','shares','1'],['Price *','price','0.0001'],['Fees','fees','0.01']].map(([label,key,step]) => (
+                <div key={key}>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">{label}</label>
+                  <input type="number" step={step} value={form[key]}
+                    onChange={e => set(key, e.target.value)}
+                    placeholder={key === 'fees' ? '0' : ''}
+                    className="w-full text-[12px] border border-gray-200 rounded-lg px-2 py-2 outline-none focus:border-blue-300 mono" />
+                </div>
+              ))}
+            </div>
+
             <div>
-              <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Date *</label>
-              <input type="date" value={form.date} onChange={e => set('date', e.target.value)}
+              <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Note (optional)</label>
+              <input type="text" value={form.note} onChange={e => set('note', e.target.value)}
+                placeholder="Optional note…"
                 className="w-full text-[12px] border border-gray-200 rounded-lg px-2 py-2 outline-none focus:border-blue-300" />
             </div>
-            <div>
-              <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Type</label>
-              <div className="flex gap-1">
-                {['buy','sell'].map(t => (
-                  <button key={t} onClick={() => set('type', t)}
-                    className={`flex-1 text-[11px] font-semibold py-2 rounded-lg border transition-colors ${
-                      form.type === t
-                        ? t === 'buy' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-red-500 text-white border-red-500'
-                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                    }`}>{t.toUpperCase()}</button>
-                ))}
-              </div>
-            </div>
           </div>
-
-          <div className="grid grid-cols-3 gap-2 mb-2">
-            {[['Shares *','shares','1'],['Price *','price','0.0001'],['Fees','fees','0.01']].map(([label,key,step]) => (
-              <div key={key}>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">{label}</label>
-                <input type="number" step={step} value={form[key]}
-                  onChange={e => set(key, e.target.value)}
-                  placeholder={key === 'fees' ? '0' : ''}
-                  className="w-full text-[12px] border border-gray-200 rounded-lg px-2 py-2 outline-none focus:border-blue-300 mono" />
-              </div>
-            ))}
-          </div>
-
-          <div>
-            <label className="text-[10px] text-gray-400 uppercase tracking-wide block mb-0.5">Note (optional)</label>
-            <input type="text" value={form.note} onChange={e => set('note', e.target.value)}
-              placeholder="Optional note…"
-              className="w-full text-[12px] border border-gray-200 rounded-lg px-2 py-2 outline-none focus:border-blue-300" />
-          </div>
-        </div>
+        )}
 
         {error && <div className="text-[12px] text-red-500 mb-3 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
 
-        <button onClick={handleSave} disabled={saving}
-          className="w-full py-3 bg-gray-900 text-white font-semibold rounded-xl text-[14px] hover:bg-gray-700 disabled:opacity-40 transition-colors">
-          {saving ? 'Adding…' : 'Add Holding'}
-        </button>
+        {selected && (
+          <button onClick={handleSave} disabled={saving}
+            className="w-full py-3 bg-gray-900 text-white font-semibold rounded-xl text-[14px] hover:bg-gray-700 disabled:opacity-40 transition-colors">
+            {saving ? 'Adding…' : 'Add Holding'}
+          </button>
+        )}
       </div>
     </div>
   );
