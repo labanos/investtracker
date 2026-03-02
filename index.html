@@ -902,13 +902,16 @@ function AddHoldingModal({ onClose, onAdded, portfolioId }) {
 }
 
 // ─── NewsPanel ─────────────────────────────────────────────────────────────
+const NEWS_PREVIEW = 5;
+
 function NewsPanel({ yhTicker }) {
-  const [news,    setNews]    = useState(null);  // null = loading
-  const [error,   setError]   = useState(false);
+  const [news,     setNews]     = useState(null);  // null = loading
+  const [error,    setError]    = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    setNews(null); setError(false);
+    setNews(null); setError(false); setExpanded(false);
     fetch(`${WORKER_URL}/?news=${encodeURIComponent(yhTicker)}`)
       .then(r => r.json())
       .then(d => { if (!cancelled) setNews(d.news || []); })
@@ -922,6 +925,9 @@ function NewsPanel({ yhTicker }) {
     if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
     return Math.floor(diff / 86400) + 'd ago';
   };
+
+  const visible = news ? (expanded ? news : news.slice(0, NEWS_PREVIEW)) : [];
+  const hasMore = news && news.length > NEWS_PREVIEW;
 
   return (
     <div className="mx-4 mb-6">
@@ -947,26 +953,35 @@ function NewsPanel({ yhTicker }) {
       )}
 
       {news && news.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {news.map((item, i) => (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          {visible.map((item, i) => (
             <a key={i} href={item.link} target="_blank" rel="noopener noreferrer"
-              className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex gap-3 items-start hover:bg-gray-50 transition-colors group">
+              className={`flex gap-3 items-start px-4 py-3 hover:bg-gray-50 transition-colors group ${i < visible.length - 1 || hasMore ? 'border-b border-gray-100' : ''}`}>
               {item.thumbnail && (
-                <img src={item.thumbnail} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0 mt-0.5 bg-gray-100" />
+                <img src={item.thumbnail} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0 mt-0.5 bg-gray-100" />
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] text-gray-800 font-medium leading-snug group-hover:text-blue-700 transition-colors line-clamp-2">
                   {item.title}
                 </p>
-                <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex items-center gap-2 mt-1">
                   <span className="text-[11px] text-gray-400">{item.publisher}</span>
                   <span className="text-gray-300 text-[10px]">·</span>
                   <span className="text-[11px] text-gray-400 mono">{timeAgo(item.time)}</span>
                 </div>
               </div>
-              <span className="text-gray-300 group-hover:text-gray-400 text-[14px] shrink-0 mt-0.5 transition-colors">↗</span>
+              <span className="text-gray-300 group-hover:text-gray-400 text-[13px] shrink-0 mt-0.5 transition-colors">↗</span>
             </a>
           ))}
+
+          {hasMore && (
+            <button onClick={() => setExpanded(e => !e)}
+              className="w-full px-4 py-2.5 text-[12px] text-blue-500 hover:text-blue-700 hover:bg-blue-50 transition-colors flex items-center justify-center gap-1 font-medium">
+              {expanded
+                ? <>Show less <span className="text-[10px]">▲</span></>
+                : <>Show {news.length - NEWS_PREVIEW} more <span className="text-[10px]">▼</span></>}
+            </button>
+          )}
         </div>
       )}
     </div>
