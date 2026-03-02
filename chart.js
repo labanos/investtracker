@@ -171,8 +171,8 @@ const StockChart = ({ yhTicker, ccy }) => {
           <circle cx={hover.x} cy={hover.y} r={4 / svgScale} fill={color} stroke="white"
             strokeWidth="2" vectorEffect="non-scaling-stroke" />
           <rect x={tipX} y={tipY} width={tipW} height={tipH} rx={5 / svgScale}
-            fill="white" stroke="#e2e8f0" strokeWidth="1" vectorEffect="non-scaling-stroke"
-            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.10))' }} />
+            fill="white" fillOpacity="0.82" stroke="#e2e8f0" strokeWidth="1"
+            vectorEffect="non-scaling-stroke" />
           <text x={tipX + 10 / svgScale} y={tipY + 18 / svgScale}
             fontSize={tipDateSz} fill="#64748b">{dateStr}</text>
           <text x={tipX + 10 / svgScale} y={tipY + 38 / svgScale}
@@ -583,8 +583,8 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
           <circle cx={hover.x} cy={hover.y} r={4 / svgScale} fill={color} stroke="white"
             strokeWidth="2" vectorEffect="non-scaling-stroke" />
           <rect x={tipX} y={tipY} width={tipW} height={tipH} rx={5 / svgScale}
-            fill="white" stroke="#e2e8f0" strokeWidth="1" vectorEffect="non-scaling-stroke"
-            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.10))' }} />
+            fill="white" fillOpacity="0.82" stroke="#e2e8f0" strokeWidth="1"
+            vectorEffect="non-scaling-stroke" />
           <text x={tipX + 10 / svgScale} y={tipY + 18 / svgScale}
             fontSize={tipDateSz} fill="#64748b">{dateStr}</text>
           <text x={tipX + 10 / svgScale} y={tipY + 38 / svgScale}
