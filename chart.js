@@ -485,12 +485,27 @@ const PortfolioChart = ({ positions, allTxns, baseCcy }) => {
   let color       = '#16a34a';
 
   if (pts && pts.length > 1) {
-    periodChange = pts[pts.length - 1].value - pts[0].value;
-    periodReturn = periodChange / pts[0].value * 100;
+    // For 1D, base the change on the previous-close portfolio value so the label
+    // reads "change from last close" (same as a standard broker view), not
+    // "change from today's open".  Derive prevClose per position from chgPct.
+    let baseValue = pts[0].value;
+    if (range === '1d' && positions && positions.length > 0) {
+      let ref = 0;
+      positions.forEach(pos => {
+        if (!pos.shares || pos.shares <= 0 || !pos.price || !pos.fxToBase) return;
+        // chgPct is decimal (e.g. -0.0195 = -1.95%); prevClose = price / (1 + chgPct)
+        const prevPrice = pos.chgPct ? pos.price / (1 + pos.chgPct) : pos.price;
+        ref += pos.shares * prevPrice * pos.fxToBase;
+      });
+      if (ref > 0) baseValue = ref;
+    }
+
+    periodChange = pts[pts.length - 1].value - baseValue;
+    periodReturn = periodChange / baseValue * 100;
     color = periodReturn >= 0 ? '#16a34a' : '#dc2626';
 
-    const minV  = Math.min(...pts.map(p => p.value));
-    const maxV  = Math.max(...pts.map(p => p.value));
+    const minV  = Math.min(baseValue, ...pts.map(p => p.value));
+    const maxV  = Math.max(baseValue, ...pts.map(p => p.value));
     const span  = (maxV - minV) || 1;
     const pad   = span * 0.06;
     const lo    = minV - pad, hi = maxV + pad, rng = hi - lo;
