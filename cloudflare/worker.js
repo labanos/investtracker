@@ -13,14 +13,6 @@ export default {
       });
     }
 
-    // Returns true if a Unix-seconds timestamp falls on today's date in CET/CEST
-    function tradedTodayCET(unixSeconds) {
-      const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Copenhagen' });
-      const tradeDate = fmt.format(new Date(unixSeconds * 1000));
-      const today    = fmt.format(new Date());
-      return tradeDate === today;
-    }
-
     // Chart endpoint: ?chart=SYMBOL&range=...
     const chart = url.searchParams.get('chart');
     if (chart) {
@@ -66,8 +58,7 @@ export default {
     const results = await Promise.all(symbols.map(async symbol => {
       try {
         // Use 5d range with 1d interval so we always get recent daily candles;
-        // range=1d returns no timestamps for some tickers (e.g. NOVO-B.CO) and
-        // meta.regularMarketTime can be stale (showing last Friday on a Monday).
+        // range=1d returns no timestamps for some tickers (e.g. NOVO-B.CO).
         const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
         const res  = await fetch(yfUrl, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
@@ -77,14 +68,15 @@ export default {
         const meta       = result?.meta;
         if (!meta) return null;
         const price        = meta.regularMarketPrice ?? null;
-        const prevClose    = meta.chartPreviousClose ?? meta.previousClose ?? null;
-        // Prefer the last actual data-point timestamp over meta.regularMarketTime,
-        // which Yahoo sometimes leaves stale (e.g. shows last Friday on a Monday).
-        const timestamps   = result.timestamp ?? [];
-        const lastDataTs   = timestamps.length > 0 ? timestamps[timestamps.length - 1] : null;
-        const lastTradeTs  = lastDataTs ?? meta.regularMarketTime ?? null;
-        const tradedToday  = lastTradeTs ? tradedTodayCET(lastTradeTs) : false;
-        const changePercent = (tradedToday && prevClose && price != null)
+        // Use the last non-null close from the candles array as prevClose.
+        // This gives us the most recent completed trading day's close (e.g. last Friday
+        // on a Monday), which is what we want for day-over-day change.
+        // meta.chartPreviousClose is the close *before* the 5d window (6+ days ago)
+        // and is therefore wrong for this purpose.
+        const closes       = result?.indicators?.quote?.[0]?.close ?? [];
+        const lastClose    = closes.filter(c => c != null).slice(-1)[0] ?? null;
+        const prevClose    = lastClose ?? meta.chartPreviousClose ?? meta.previousClose ?? null;
+        const changePercent = (prevClose && price != null)
           ? ((price - prevClose) / prevClose) * 100
           : 0;
         return { symbol, regularMarketPrice: price, regularMarketChangePercent: changePercent };
