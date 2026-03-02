@@ -1,0 +1,4 @@
+name            = "yf-proxy"
+main            = "worker.js"
+compatibility_date = "2025-01-01"
+account_id      = "5b850153715d741a6c323976c2d0657a"
