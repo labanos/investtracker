@@ -25,7 +25,7 @@ export default {
     if (chart) {
       const range = url.searchParams.get('range') || '3mo';
       const intervalMap = {
-        '1d':  '1m',
+        '1d':  '5m',
         '5d':  '5m',
         '1mo': '1d',
         '3mo': '1d',
@@ -64,16 +64,24 @@ export default {
     const symbols = symbolsParam.split(',').map(s => s.trim()).filter(Boolean);
     const results = await Promise.all(symbols.map(async symbol => {
       try {
-        const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+        // Use 5d range with 1d interval so we always get recent daily candles;
+        // range=1d returns no timestamps for some tickers (e.g. NOVO-B.CO) and
+        // meta.regularMarketTime can be stale (showing last Friday on a Monday).
+        const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
         const res  = await fetch(yfUrl, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         });
         const data = await res.json();
-        const meta = data?.chart?.result?.[0]?.meta;
+        const result     = data?.chart?.result?.[0];
+        const meta       = result?.meta;
         if (!meta) return null;
         const price        = meta.regularMarketPrice ?? null;
         const prevClose    = meta.chartPreviousClose ?? meta.previousClose ?? null;
-        const lastTradeTs  = meta.regularMarketTime ?? null;
+        // Prefer the last actual data-point timestamp over meta.regularMarketTime,
+        // which Yahoo sometimes leaves stale (e.g. shows last Friday on a Monday).
+        const timestamps   = result.timestamp ?? [];
+        const lastDataTs   = timestamps.length > 0 ? timestamps[timestamps.length - 1] : null;
+        const lastTradeTs  = lastDataTs ?? meta.regularMarketTime ?? null;
         const tradedToday  = lastTradeTs ? tradedTodayCET(lastTradeTs) : false;
         const changePercent = (tradedToday && prevClose && price != null)
           ? ((price - prevClose) / prevClose) * 100
