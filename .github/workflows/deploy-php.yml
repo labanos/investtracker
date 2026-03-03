@@ -9,6 +9,7 @@ on:
       - 'php/portfolio.php'
       - 'php/portfolio_history.php'
       - 'php/db_migrate.php'
+      - 'php/valuations.php'
 
 jobs:
   deploy:
@@ -19,7 +20,7 @@ jobs:
 
       - name: Inject DB credentials
         run: |
-          FILES="php/notes.php php/transactions.php php/portfolio.php php/portfolio_history.php php/db_migrate.php"
+          FILES="php/notes.php php/transactions.php php/portfolio.php php/portfolio_history.php php/db_migrate.php php/valuations.php"
           sed -i "s|%%DB_HOST%%|${{ secrets.DB_HOST }}|g" $FILES
           sed -i "s|%%DB_NAME%%|${{ secrets.DB_NAME }}|g" $FILES
           sed -i "s|%%DB_USER%%|${{ secrets.DB_USER }}|g" $FILES
@@ -40,6 +41,7 @@ jobs:
           put php/portfolio.php portfolio.php
           put php/portfolio_history.php portfolio_history.php
           put php/db_migrate.php db_migrate.php
+          put php/valuations.php valuations.php
           SFTP
 
       - name: Done
