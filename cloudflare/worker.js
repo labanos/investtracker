@@ -41,10 +41,20 @@ export default {
           `https://financialmodelingprep.com/stable/income-statement?symbol=${encodeURIComponent(fmpSymbol)}&limit=5&apikey=${fmpKey}`,
           { headers: { 'User-Agent': 'Mozilla/5.0' } }
         );
-        const fmpData = await fmpRes.json();
+        const fmpText = await fmpRes.text();
+        let fmpData;
+        try {
+          fmpData = JSON.parse(fmpText);
+        } catch (e) {
+          return new Response(JSON.stringify({ error: `FMP returned non-JSON for ${symbol}: ${fmpText.slice(0, 120)}` }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
 
         if (!Array.isArray(fmpData) || fmpData.length === 0) {
-          return new Response(JSON.stringify({ error: 'No financial data found for ' + symbol }), {
+          const msg = fmpData?.['Error Message'] || fmpData?.message || `No financial data found for ${symbol}`;
+          return new Response(JSON.stringify({ error: msg }), {
             status: 404,
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
           });
