@@ -94,7 +94,9 @@ export default {
         }
 
         const geminiData = await geminiRes.json();
-        const rawJson    = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+        // gemini-2.5-flash uses thinking mode: parts[0] is reasoning (thought:true), parts[1] is the actual response
+        const parts   = geminiData.candidates?.[0]?.content?.parts || [];
+        const rawJson = (parts.find(p => !p.thought) || parts[parts.length - 1])?.text;
 
         if (!rawJson) {
           return new Response(JSON.stringify({ error: 'No content from Gemini', raw: JSON.stringify(geminiData).slice(0, 400) }), {
