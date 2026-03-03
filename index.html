@@ -887,9 +887,9 @@ function ValuationPanel({ ticker, portfolioId, currentPrice, currency }) {
   const [genError,   setGenError]  = useState(null);
 
   const loadModel = useCallback(() => {
-    if (!ticker || !portfolioId) return;
+    if (!ticker) return;
     setLoading(true);
-    fetch(`${VALUATIONS_API}?ticker=${encodeURIComponent(ticker)}&portfolio_id=${portfolioId}`)
+    fetch(`${VALUATIONS_API}?ticker=${encodeURIComponent(ticker)}`)
       .then(r => r.json())
       .then(data => { setModel(data || null); setLoading(false); })
       .catch(() => setLoading(false));
