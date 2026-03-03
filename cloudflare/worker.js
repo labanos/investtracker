@@ -64,7 +64,7 @@ export default {
         // 3. Call Gemini
         const geminiKey = env.GEMINI_API_KEY;
         const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -80,8 +80,14 @@ export default {
         );
 
         if (!geminiRes.ok) {
-          const errText = await geminiRes.text();
-          return new Response(JSON.stringify({ error: 'Gemini API error', detail: errText.slice(0, 400) }), {
+          const errJson = await geminiRes.json().catch(() => null);
+          const errMsg  = errJson?.error?.message || 'Unknown Gemini error';
+          const errCode = errJson?.error?.code || geminiRes.status;
+          // Surface quota errors with a readable message
+          const friendly = errCode === 429
+            ? 'Gemini quota exceeded — enable billing at aistudio.google.com or wait for quota reset'
+            : `Gemini error ${errCode}: ${errMsg.slice(0, 200)}`;
+          return new Response(JSON.stringify({ error: friendly }), {
             status: 502,
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
           });
