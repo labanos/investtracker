@@ -71,7 +71,6 @@ export default {
             body: JSON.stringify({
               contents: [{ parts: [{ text: prompt }] }],
               generationConfig: {
-                responseMimeType: 'application/json',
                 temperature: 0.3,
                 maxOutputTokens: 4096,
               },
@@ -105,7 +104,9 @@ export default {
 
         let payload;
         try {
-          payload = JSON.parse(rawJson);
+          // Strip markdown code fences if Gemini wrapped the JSON
+          const cleaned = rawJson.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+          payload = JSON.parse(cleaned);
         } catch (e) {
           return new Response(JSON.stringify({ error: 'Gemini returned invalid JSON', raw: rawJson.slice(0, 500) }), {
             status: 502,
