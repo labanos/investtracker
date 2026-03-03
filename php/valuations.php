@@ -29,16 +29,30 @@ require_once __DIR__ . '/auth_check.php';
 
 $pdo->exec("CREATE TABLE IF NOT EXISTS valuation_models (
     id           INT AUTO_INCREMENT PRIMARY KEY,
-    portfolio_id INT NOT NULL,
+    portfolio_id INT NOT NULL DEFAULT 0,
     ticker       VARCHAR(20) NOT NULL,
     model_date   DATE NOT NULL,
     currency     VARCHAR(10) NOT NULL DEFAULT 'USD',
     notes        TEXT,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uniq_pf_ticker_date (portfolio_id, ticker, model_date),
-    INDEX idx_pf_ticker (portfolio_id, ticker)
+    UNIQUE KEY uniq_ticker_date (ticker, model_date),
+    INDEX idx_ticker (ticker)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// Migrate existing tables: drop old portfolio-scoped unique key, add ticker-only key
+try {
+    $pdo->exec("ALTER TABLE valuation_models DROP INDEX uniq_pf_ticker_date");
+} catch (Exception $e) { /* already removed or never existed */ }
+try {
+    $pdo->exec("ALTER TABLE valuation_models DROP INDEX idx_pf_ticker");
+} catch (Exception $e) { /* already removed or never existed */ }
+try {
+    $pdo->exec("ALTER TABLE valuation_models ADD UNIQUE KEY uniq_ticker_date (ticker, model_date)");
+} catch (Exception $e) { /* already exists */ }
+try {
+    $pdo->exec("ALTER TABLE valuation_models ADD INDEX idx_ticker (ticker)");
+} catch (Exception $e) { /* already exists */ }
 
 $pdo->exec("CREATE TABLE IF NOT EXISTS valuation_actuals (
     id           INT AUTO_INCREMENT PRIMARY KEY,
@@ -93,23 +107,22 @@ if ($method === 'POST' && isset($_GET['_method'])) {
     if ($override === 'DELETE') $method = 'DELETE';
 }
 
-// ── GET — fetch latest model for a ticker ─────────────────────────────────────
+// ── GET — fetch latest model for a ticker (shared across portfolios) ──────────
 if ($method === 'GET') {
-    $ticker    = strtoupper(trim($_GET['ticker']    ?? ''));
-    $pfId      = (int)($_GET['portfolio_id'] ?? 0);
-    if (!$ticker || !$pfId) {
+    $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
+    if (!$ticker) {
         http_response_code(400);
-        echo json_encode(['error' => 'ticker and portfolio_id required']);
+        echo json_encode(['error' => 'ticker required']);
         exit;
     }
 
-    // Most recent model for this ticker in this portfolio
+    // Most recent model for this ticker (portfolio-agnostic)
     $stmt = $pdo->prepare(
         "SELECT * FROM valuation_models
-         WHERE portfolio_id = ? AND ticker = ?
+         WHERE ticker = ?
          ORDER BY model_date DESC LIMIT 1"
     );
-    $stmt->execute([$pfId, $ticker]);
+    $stmt->execute([$ticker]);
     $model = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$model) {
@@ -155,33 +168,33 @@ if ($method === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
     if (!$data) { http_response_code(400); echo json_encode(['error' => 'Invalid JSON']); exit; }
 
-    $pfId      = (int)($data['portfolio_id'] ?? 0);
+    $pfId      = (int)($data['portfolio_id'] ?? 0); // stored for reference, not used as key
     $ticker    = strtoupper(trim($data['ticker'] ?? ''));
     $modelDate = trim($data['model_date'] ?? date('Y-m-d'));
     $currency  = strtoupper(trim($data['currency'] ?? 'USD'));
     $notes     = trim($data['notes'] ?? '');
 
-    if (!$pfId || !$ticker) {
+    if (!$ticker) {
         http_response_code(400);
-        echo json_encode(['error' => 'portfolio_id and ticker required']);
+        echo json_encode(['error' => 'ticker required']);
         exit;
     }
 
     $pdo->beginTransaction();
     try {
-        // Upsert model record (replace on unique key)
+        // Upsert model record — unique on (ticker, model_date), portfolio_id stored for audit
         $stmt = $pdo->prepare(
             "INSERT INTO valuation_models (portfolio_id, ticker, model_date, currency, notes)
              VALUES (?,?,?,?,?)
-             ON DUPLICATE KEY UPDATE currency=VALUES(currency), notes=VALUES(notes), updated_at=NOW()"
+             ON DUPLICATE KEY UPDATE portfolio_id=VALUES(portfolio_id), currency=VALUES(currency), notes=VALUES(notes), updated_at=NOW()"
         );
         $stmt->execute([$pfId, $ticker, $modelDate, $currency, $notes]);
 
         // Fetch the model id (newly inserted or existing)
         $stmt = $pdo->prepare(
-            "SELECT id FROM valuation_models WHERE portfolio_id=? AND ticker=? AND model_date=?"
+            "SELECT id FROM valuation_models WHERE ticker=? AND model_date=?"
         );
-        $stmt->execute([$pfId, $ticker, $modelDate]);
+        $stmt->execute([$ticker, $modelDate]);
         $mid = (int)$stmt->fetchColumn();
 
         // Replace actuals
@@ -274,4 +287,3 @@ if ($method === 'DELETE') {
 
 http_response_code(405);
 echo json_encode(['error' => 'Method not allowed']);
-
