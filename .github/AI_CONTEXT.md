@@ -288,8 +288,6 @@ Since GitHub Actions handles auto-deployment on push, the typical workflow is:
 2. Commit and push to `master`
 3. GitHub Actions picks it up within ~30 seconds
 
-To interact with the GitHub API from Claude Cowork, use the token in `CLAUDE.md`.
-
 ---
 
 ## 💡 Key Technical Decisions & Gotchas
@@ -359,14 +357,39 @@ The app applies FX rates client-side to convert all holdings to the portfolio's 
 
 ## 🔧 Development Workflow for AI Assistants
 
-When Claude Cowork is asked to implement a feature or fix a bug:
+### Starting a new session from a GitHub issue
 
-1. **Read this file first** — always.
-2. **Check `TODO.md`** for backlog context.
-3. **Identify which component(s)** are involved: frontend (`index.html`/`chart.js`), PHP backend (`php/`), or Cloudflare Worker (`cloudflare/worker.js`).
-4. **For PHP changes**: edit the file in `php/` with `%%placeholder%%` credentials. GitHub Actions injects real credentials at deploy time.
-5. **For DB schema changes**: add a new idempotent migration step in `db_migrate.php`.
-6. **For new PHP endpoints**: include `auth_check.php` and call `require_auth($pdo)` on all write routes.
-7. **Commit and push to `master`** — CI/CD handles the rest.
-8. **Use the GitHub API token** from `CLAUDE.md` for any repo operations.
-9. **Do not expose real credentials** — the DB credentials only exist in GitHub Secrets and are injected at deploy time.
+The standard way Peter kicks off a task is by pasting a GitHub issue URL into Claude Cowork. When that happens:
+
+1. **Read this file first** — clone the repo (see below) and read `.github/AI_CONTEXT.md` before writing any code.
+2. **Fetch the issue** via `WebFetch` on the issue URL to get the full title, description, and checklist.
+3. **Check `TODO.md`** for additional backlog context.
+4. **Identify which component(s)** are involved: frontend (`index.html`/`chart.js`), PHP backend (`php/`), or Cloudflare Worker (`cloudflare/worker.js`).
+
+### GitHub authentication — read this carefully
+
+The repo is at `https://github.com/labanos/investtracker`. All git operations use a Personal Access Token (PAT) that Peter provides.
+
+**The token in `CLAUDE.md` may be read-only or expired.** Do not assume it can push. The safe workflow is:
+
+1. **Clone** using whatever token is in `CLAUDE.md` — cloning only needs read access and will succeed even with a scoped-down token.
+2. **Do all the work** — edit files, run tests, make commits locally.
+3. **Before pushing**, attempt the push. If it fails with an auth error or "password authentication not supported", immediately ask Peter: *"The token in CLAUDE.md can't push — can you drop a write-capable PAT in the chat?"*
+4. **Use the token Peter provides in-chat** to push: `git push https://labanos:<TOKEN>@github.com/labanos/investtracker.git master`
+5. **Never commit a token into any file** — GitHub push protection will block the push and the token will be considered compromised.
+
+### Step-by-step for a typical feature
+
+1. `git clone https://<token>@github.com/labanos/investtracker.git`
+2. Read `.github/AI_CONTEXT.md` (this file)
+3. Implement the changes
+4. For PHP changes: keep `%%placeholder%%` credentials — never fill them in
+5. For DB schema changes: append an idempotent migration to `db_migrate.php`
+6. For new PHP write endpoints: use `require_auth($pdo)` from `auth_check.php`
+7. Commit with a descriptive message referencing the issue (e.g. `fix: ... closes #N`)
+8. Push — ask Peter for a write token if needed
+9. GitHub Actions deploys automatically within ~30 seconds
+
+### Do not expose real credentials
+
+DB credentials only exist in GitHub Secrets. PHP files in the repo use `%%placeholder%%` strings that are substituted at deploy time. Never fill them in, log them, or include them in any file.
