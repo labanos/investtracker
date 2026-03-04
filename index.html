@@ -877,7 +877,7 @@ function NewsPanel({ yhTicker }) {
 }
 
 // ─── ValuationPanel component ───────────────────────────────────────────────
-function ValuationPanel({ ticker, portfolioId, currentPrice, currency }) {
+function ValuationPanel({ ticker, portfolioId, currentPrice, currency, user, onRequireLogin }) {
   const { useState, useEffect, useCallback } = React;
   const [model,      setModel]     = useState(null);
   const [loading,    setLoading]   = useState(true);
@@ -885,13 +885,79 @@ function ValuationPanel({ ticker, portfolioId, currentPrice, currency }) {
   const [activeTab,  setActiveTab] = useState('base');
   const [generating, setGenerating]= useState(false);
   const [genError,   setGenError]  = useState(null);
+  const [editMode,   setEditMode]  = useState(false);
+  const [originalModel, setOriginalModel] = useState(null);
+  const [showActuals, setShowActuals] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleActualsChange = (field, value) => {
+    setModel(prevModel => {
+      const newModel = { ...prevModel };
+      const actualsY0 = newModel.actuals.find(a => a.label === 'Y0');
+      if (actualsY0) {
+        actualsY0[field] = value;
+      }
+      return newModel;
+    });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setGenError(null);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const payload = {
+        ...model,
+        model_date: today,
+        portfolio_id: portfolioId,
+      };
+      const res = await fetch(VALUATIONS_API, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setGenError(data.error || 'Save failed');
+        setSaving(false);
+      } else {
+        setEditMode(false);
+        setSaving(false);
+        loadModel();
+      }
+    } catch (e) {
+      setGenError(e.message);
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setModel(originalModel);
+    setEditMode(false);
+  };
+
+  const handleScenarioChange = (field, value) => {
+    setModel(prevModel => {
+      const newModel = { ...prevModel };
+      const scenario = newModel.scenarios.find(s => s.scenario === activeTab);
+      if (scenario) {
+        scenario[field] = value;
+      }
+      return newModel;
+    });
+  };
 
   const loadModel = useCallback(() => {
     if (!ticker) return;
     setLoading(true);
+    setEditMode(false);
     fetch(`${VALUATIONS_API}?ticker=${encodeURIComponent(ticker)}`)
       .then(r => r.json())
-      .then(data => { setModel(data || null); setLoading(false); })
+      .then(data => {
+        setModel(data || null);
+        setOriginalModel(data ? JSON.parse(JSON.stringify(data)) : null); // Deep copy
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [ticker, portfolioId]);
 
@@ -899,7 +965,7 @@ function ValuationPanel({ ticker, portfolioId, currentPrice, currency }) {
 
   const generateValuation = async () => {
     const token = localStorage.getItem('auth_token');
-    if (!token) { setGenError('Please log in to generate a valuation.'); return; }
+    if (!token) { onRequireLogin(() => generateValuation()); return; }
     setGenerating(true);
     setGenError(null);
     try {
@@ -975,7 +1041,25 @@ function ValuationPanel({ ticker, portfolioId, currentPrice, currency }) {
   const fv_fmt = v => v >= 100 ? f0(v) : f2(v);
   const pct_fmt = v => v == null ? '—' : `${v >= 0 ? '+' : ''}${(v*100).toFixed(1)}%`;
   const rev_fmt = v => v >= 1e6 ? `${(v/1e6).toFixed(1)}T` : v >= 1e3 ? `${(v/1e3).toFixed(0)}B` : `${v.toFixed(0)}M`;
-  const p_fmt   = v => `${(v*100).toFixed(1)}%`;
+  const p_fmt   = v => v == null || isNaN(v) ? '—' : `${(v*100).toFixed(1)}%`;
+
+
+  const EditableField = ({ label, value, isPct, onChange }) => (
+    <div className="px-3 py-2 border-b border-r border-gray-50 last:border-r-0">
+      <div className="text-[9px] text-gray-400 uppercase tracking-wide">{label}</div>
+      {editMode ? (
+        <input
+          type="number"
+          step={isPct ? "0.001" : "1"}
+          value={isPct ? (value * 100).toFixed(1) : value}
+          onChange={e => onChange(isPct ? parseFloat(e.target.value) / 100 : parseFloat(e.target.value))}
+          className="w-full text-[12px] font-semibold mono text-gray-800 bg-gray-50 border border-gray-200 rounded-md px-1 py-0.5"
+        />
+      ) : (
+        <div className="text-[12px] font-semibold mono text-gray-800">{isPct ? p_fmt(value) : value}</div>
+      )}
+    </div>
+  );
 
   const SC_LABEL = { bear:'Bear', base:'Base', bull:'Bull' };
   const SC_BADGE = {
@@ -996,19 +1080,61 @@ function ValuationPanel({ ticker, portfolioId, currentPrice, currency }) {
         <h2 className="text-[13px] font-semibold text-gray-600 uppercase tracking-wide">Valuation Model</h2>
         <div className="flex items-center gap-2">
           {genError && <span className="text-[10px] text-red-400">{genError}</span>}
-          <button
-            onClick={generateValuation}
-            disabled={generating}
-            title="Regenerate with AI"
-            className="text-[10px] text-gray-400 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
-            {generating
-              ? <><span className="animate-spin inline-block w-2.5 h-2.5 border border-gray-500 border-t-transparent rounded-full"></span> <span>Generating…</span></>
-              : <><span>✦</span> <span>Regenerate</span></>}
-          </button>
+
+          {editMode ? (
+            <>
+              <button onClick={handleCancel} className="text-[11px] text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-100">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="text-[11px] font-semibold bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-500 disabled:opacity-50">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          ) : (
+            <>
+              {user && (
+                <button
+                  onClick={() => onRequireLogin(() => setEditMode(true))}
+                  title="Edit model"
+                  className="text-[10px] text-gray-400 hover:text-gray-700 disabled:opacity-40 transition-colors flex items-center gap-1">
+                  <span>✎</span>
+                  <span>Edit</span>
+                </button>
+              )}
+              <button
+                onClick={generateValuation}
+                disabled={generating}
+                title="Regenerate with AI"
+                className="text-[10px] text-gray-400 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+                {generating
+                  ? <><span className="animate-spin inline-block w-2.5 h-2.5 border border-gray-500 border-t-transparent rounded-full"></span> <span>Generating…</span></>
+                  : <><span>✦</span> <span>Regenerate</span></>}
+              </button>
+            </>
+          )}
+
           <span className="text-[10px] text-gray-300">·</span>
           <span className="text-[10px] text-gray-400">{model.model_date}</span>
         </div>
       </div>
+
+      {/* ── Edit Y0 Actuals (collapsible) ── */}
+      {editMode && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-2">
+          <button onClick={() => setShowActuals(s => !s)} className="w-full text-left px-4 py-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 flex justify-between items-center">
+            <span>Edit Y0 Baseline Actuals</span>
+            <span className={`transition-transform transform ${showActuals ? 'rotate-180' : ''}`}>▼</span>
+          </button>
+          {showActuals && y0 && (
+            <div className="px-4 pb-3 border-t border-gray-100">
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <EditableField label="Revenue" value={y0.revenue} onChange={v => handleActualsChange('revenue', v)} />
+                <EditableField label="Gross Profit" value={y0.gross_profit} onChange={v => handleActualsChange('gross_profit', v)} />
+                <EditableField label="Op. Income" value={y0.op_income} onChange={v => handleActualsChange('op_income', v)} />
+                <EditableField label="Shares" value={y0.shares} onChange={v => handleActualsChange('shares', v)} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Blended fair value summary card ── */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 mb-2">
@@ -1042,8 +1168,8 @@ function ValuationPanel({ ticker, portfolioId, currentPrice, currency }) {
           const isActive = expanded && activeTab === key;
           return (
             <div key={key}
-              onClick={() => { setActiveTab(key); setExpanded(true); }}
-              className={`bg-white rounded-xl border shadow-sm px-3 py-2.5 cursor-pointer hover:shadow transition-all ${isActive ? SC_BORDER[key] : 'border-gray-100'}`}>
+              onClick={() => { if (!editMode) { setActiveTab(key); setExpanded(true); } }}
+              className={`bg-white rounded-xl border shadow-sm px-3 py-2.5 transition-all ${isActive ? SC_BORDER[key] : 'border-gray-100'} ${editMode ? 'cursor-default' : 'cursor-pointer hover:shadow'}`}>
               <span className={`inline-block text-[9px] font-bold rounded px-1.5 py-0.5 mb-1.5 ${SC_BADGE[key]}`}>{SC_LABEL[key]}</span>
               <div className="text-[15px] font-bold mono text-gray-900">{fv_fmt(fv)}</div>
               <div className={`text-[11px] font-semibold mono ${(scUpside||0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{pct_fmt(scUpside)}</div>
@@ -1077,19 +1203,12 @@ function ValuationPanel({ ticker, portfolioId, currentPrice, currency }) {
 
             {/* Assumptions chips */}
             <div className="grid grid-cols-3 border-b border-gray-100">
-              {[
-                ['Rev Growth', p_fmt(sc.rev_growth)],
-                ['Target GM',  p_fmt(sc.tgt_gm)],
-                ['Target OM',  p_fmt(sc.tgt_om)],
-                ['Op→Net',     p_fmt(sc.op_conv)],
-                ['Shr Δ/yr',   p_fmt(sc.shr_chg)],
-                ['Discount',   p_fmt(sc.disc_rt)],
-              ].map(([lbl, val]) => (
-                <div key={lbl} className="px-3 py-2 border-b border-r border-gray-50 last:border-r-0">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-wide">{lbl}</div>
-                  <div className="text-[12px] font-semibold mono text-gray-800">{val}</div>
-                </div>
-              ))}
+                <EditableField label="Rev Growth" value={sc.rev_growth} isPct={true} onChange={v => handleScenarioChange('rev_growth', v)} />
+                <EditableField label="Target GM"  value={sc.tgt_gm}     isPct={true} onChange={v => handleScenarioChange('tgt_gm', v)} />
+                <EditableField label="Target OM"  value={sc.tgt_om}     isPct={true} onChange={v => handleScenarioChange('tgt_om', v)} />
+                <EditableField label="Op→Net"     value={sc.op_conv}    isPct={true} onChange={v => handleScenarioChange('op_conv', v)} />
+                <EditableField label="Shr Δ/yr"   value={sc.shr_chg}    isPct={true} onChange={v => handleScenarioChange('shr_chg', v)} />
+                <EditableField label="Discount"   value={sc.disc_rt}    isPct={true} onChange={v => handleScenarioChange('disc_rt', v)} />
             </div>
 
             {/* Projection table */}
@@ -1119,7 +1238,17 @@ function ValuationPanel({ ticker, portfolioId, currentPrice, currency }) {
             </table>
 
             {/* Model notes */}
-            {model.notes && (
+            {editMode ? (
+              <div className="px-3 py-2 border-t border-gray-50">
+                <textarea
+                  value={model.notes || ''}
+                  onChange={e => setModel(m => ({ ...m, notes: e.target.value }))}
+                  placeholder="Model notes..."
+                  rows={2}
+                  className="w-full text-[10px] text-gray-700 leading-relaxed bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-blue-300 resize-none"
+                />
+              </div>
+            ) : model.notes && (
               <div className="px-3 py-2 border-t border-gray-50">
                 <div className="text-[10px] text-gray-400 leading-relaxed">{model.notes}</div>
               </div>
@@ -1360,6 +1489,8 @@ function DetailPage({ position: p, initialTxns, onBack, onTxnsChanged, onRemoveH
         portfolioId={portfolioId}
         currentPrice={p.price}
         currency={p.ccy}
+        user={user}
+        onRequireLogin={onRequireLogin}
       />
 
       {/* ── Transactions ── */}
