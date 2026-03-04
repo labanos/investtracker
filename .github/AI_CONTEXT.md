@@ -368,15 +368,17 @@ The standard way Peter kicks off a task is by pasting a GitHub issue URL into Cl
 
 ### GitHub authentication — read this carefully
 
-The repo is at `https://github.com/labanos/investtracker`. All git operations use a Personal Access Token (PAT) that Peter provides.
+The repo is at `https://github.com/labanos/investtracker`. All git operations use a Personal Access Token (PAT).
 
-**The token in `CLAUDE.md` may be read-only or expired.** Do not assume it can push. The safe workflow is:
+**At the start of every session, before doing any work, ask Peter for a fresh GitHub PAT:**
 
-1. **Clone** using whatever token is in `CLAUDE.md` — cloning only needs read access and will succeed even with a scoped-down token.
-2. **Do all the work** — edit files, run tests, make commits locally.
-3. **Before pushing**, attempt the push. If it fails with an auth error or "password authentication not supported", immediately ask Peter: *"The token in CLAUDE.md can't push — can you drop a write-capable PAT in the chat?"*
-4. **Use the token Peter provides in-chat** to push: `git push https://labanos:<TOKEN>@github.com/labanos/investtracker.git master`
-5. **Never commit a token into any file** — GitHub push protection will block the push and the token will be considered compromised.
+> "Before I start — can you drop a GitHub PAT with repo write access in the chat so I can push when done?"
+
+Then use it for both clone and push:
+- Clone: `git clone https://labanos:<TOKEN>@github.com/labanos/investtracker.git`
+- Push: `git push https://labanos:<TOKEN>@github.com/labanos/investtracker.git master`
+
+**Never commit a token into any file** — GitHub push protection will block the push and the token will be considered compromised.
 
 ### Step-by-step for a typical feature
 
