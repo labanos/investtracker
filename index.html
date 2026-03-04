@@ -909,6 +909,7 @@ function ValuationPanel({ ticker, portfolioId, currentPrice, currency, user, onR
       const payload = {
         ...model,
         model_date: today,
+        notes: `Model with manuel user input on ${today}`,
         portfolio_id: portfolioId,
       };
       const res = await fetch(VALUATIONS_API, {
