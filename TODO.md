@@ -4,13 +4,16 @@
 
 ## 🔖 Backlog
 
+> **Backlog is now tracked in [GitHub Issues](https://github.com/labanos/investtracker/issues).**
+> The items below are kept for reference but the canonical source of truth is GitHub Issues.
+
 - [x] **Ticker search / autocomplete** — In the Add Holding modal, use Yahoo Finance's search API (proxied via Cloudflare Worker `?search=...`) to auto-fill ticker, company name and Yahoo Finance symbol from a text search, removing the need to know the exact ticker.
 
-- [ ] **Historic returns on closed positions** — On the detail page for a zero-share holding, show realised P&L, total holding period, and annualised return.
+- [ ] **Historic returns on closed positions** → [Issue #2](https://github.com/labanos/investtracker/issues/2) — On the detail page for a zero-share holding, show realised P&L, total holding period, and annualised return.
 
-- [ ] **Price alerts** — Optional notification (email or push) when a holding moves beyond a set threshold.
+- [ ] **Price alerts** → [Issue #3](https://github.com/labanos/investtracker/issues/3) — Optional notification (email or push) when a holding moves beyond a set threshold.
 
-- [ ] **Live FX rates** — Replace the hardcoded `CACHED_FX` object with a live FX fetch on app load so currency conversions stay accurate. Candidates: ECB data feed, exchangerate.host, or similar free API. Fall back to cached values on failure.
+- [ ] **Live FX rates** → [Issue #4](https://github.com/labanos/investtracker/issues/4) — Replace the hardcoded `CACHED_FX` object with a live FX fetch on app load so currency conversions stay accurate. Candidates: ECB data feed, exchangerate.host, or similar free API. Fall back to cached values on failure.
 
 ---
 
