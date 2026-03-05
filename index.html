@@ -267,7 +267,7 @@ const CACHED_AS_OF = new Date('2026-02-26T17:00:00');
 const n = (v, d=0) => isNaN(v)||v==null ? '–' : Math.abs(v).toLocaleString('da-DK', {minimumFractionDigits:d, maximumFractionDigits:d});
 const pct = (v) => v==null||isNaN(v) ? '–' : (v>=0?'+':'−') + n(Math.abs(v*100),2) + '%';
 const signed = (v, d=0) => v==null||isNaN(v) ? '–' : (v>=0?'+':'−') + n(Math.abs(v),d);
-const clr = (v) => !v && v!==0 ? 'text-gray-400' : v > 0 ? 'text-emerald-500' : v < 0 ? 'text-red-500' : 'text-gray-400';
+const clr = (v) => Math.abs(v || 0) < 0.00005 ? 'text-gray-400' : v > 0 ? 'text-emerald-500' : 'text-red-500';
 
 // ─── computePosition ───────────────────────────────────────────────────────
 // Derives shares held and average cost from a transaction array
