@@ -1,6 +1,7 @@
 # 🤖 AI_CONTEXT.md — InvestTracker
 
 > **Written by Claude Cowork on 2026-03-04 based on full codebase analysis.**
+> **Last updated: 2026-03-06.**
 > This file is the canonical context document for any AI assistant working on this project.
 > Read this before touching any code.
 
@@ -64,7 +65,6 @@ There are three independently deployed components:
 ├── index.html              # Main SPA — React app entry point
 ├── chart.js                # StockChart + PortfolioChart React components
 ├── CNAME                   # tracker.labanos.dk (GitHub Pages custom domain)
-├── TODO.md                 # Feature backlog and completed work
 ├── upload_valuation.py     # CLI script to seed valuation models into the DB
 │
 ├── cloudflare/
@@ -320,7 +320,7 @@ PHP on Apache shared hosting sometimes has issues with `DELETE`/`PUT` HTTP metho
 `PortfolioChart` does NOT use `portfolio_snapshots` for its chart data. It reconstructs share counts from transaction history and fetches historical prices via the Worker, producing the full portfolio value curve client-side. `portfolio_snapshots` is a separate table for a different use case.
 
 ### FX conversion
-The app applies FX rates client-side to convert all holdings to the portfolio's `base_currency`. The formula is: `fxToBase = fx[stockCcy] / fx[baseCcy]`. FX rates are currently hardcoded as `CACHED_FX` in `index.html` — live FX rates are in the TODO backlog.
+The app applies FX rates client-side to convert all holdings to the portfolio's `base_currency`. The formula is: `fxToBase = fx[stockCcy] / fx[baseCcy]`. FX rates are currently hardcoded as `CACHED_FX` in `index.html` — live FX rates are tracked in issue #4.
 
 ### Auth token lifecycle
 - Token is 32-byte random hex (`bin2hex(random_bytes(32))`)
@@ -347,11 +347,22 @@ The app applies FX rates client-side to convert all holdings to the portfolio's 
 
 ---
 
-## 📋 Backlog (TODO.md)
+## 📋 Backlog (GitHub Issues)
 
-- [ ] **Historic returns on closed positions** — realised P&L, holding period, annualised return for zero-share holdings
-- [ ] **Price alerts** — email or push notification when a holding moves beyond a threshold
-- [ ] **Live FX rates** — replace `CACHED_FX` with live fetch (ECB, exchangerate.host, etc.) with cache fallback
+The backlog is tracked entirely in **GitHub Issues**: https://github.com/labanos/investtracker/issues
+
+> **Note:** `TODO.md` is no longer used. Do not update it. All feature requests and bugs live in GitHub Issues.
+
+Current open issues (as of 2026-03-06):
+
+| # | Title |
+|---|---|
+| [#2](https://github.com/labanos/investtracker/issues/2) | Historic returns on closed positions |
+| [#3](https://github.com/labanos/investtracker/issues/3) | Price alerts |
+| [#4](https://github.com/labanos/investtracker/issues/4) | Live FX rates |
+| [#6](https://github.com/labanos/investtracker/issues/6) | Browse and switch between historical DCF model versions in the UI |
+
+When starting a new task, fetch the relevant issue to get its full description and acceptance criteria.
 
 ---
 
@@ -361,36 +372,37 @@ The app applies FX rates client-side to convert all holdings to the portfolio's 
 
 The standard way Peter kicks off a task is by pasting a GitHub issue URL into Claude Cowork. When that happens:
 
-1. **Read this file first** — clone the repo (see below) and read `.github/AI_CONTEXT.md` before writing any code.
-2. **Fetch the issue** via `WebFetch` on the issue URL to get the full title, description, and checklist.
-3. **Check `TODO.md`** for additional backlog context.
+1. **Read this file first** — read `.github/AI_CONTEXT.md` before writing any code.
+2. **Fetch the issue** via the GitHub MCP tool (or `WebFetch` on the issue URL) to get the full title, description, and checklist.
+3. **Check open GitHub Issues** for additional backlog context.
 4. **Identify which component(s)** are involved: frontend (`index.html`/`chart.js`), PHP backend (`php/`), or Cloudflare Worker (`cloudflare/worker.js`).
 
-### GitHub authentication — read this carefully
+### GitHub access — MCP-first
 
-The repo is at `https://github.com/labanos/investtracker`. All git operations use a Personal Access Token (PAT).
+**When running inside Claude Cowork with an active GitHub MCP connection, always use the MCP tools directly** — no cloning needed. Use the MCP tools to read files, make edits, and push commits:
 
-**At the start of every session, before doing any work, ask Peter for a fresh GitHub PAT:**
+- Read a file: use the `get_file_contents` MCP tool
+- Create or update a file: use the `create_or_update_file` MCP tool (always include the current `sha`)
+- List issues: use the `list_issues` MCP tool
+- Get issue details: use the `get_issue` MCP tool
 
-> "Before I start — can you drop a GitHub PAT with repo write access in the chat so I can push when done?"
-
-Then use it for both clone and push:
+**Only fall back to git clone if the MCP connection is unavailable.** In that case, use a Personal Access Token (PAT):
 - Clone: `git clone https://labanos:<TOKEN>@github.com/labanos/investtracker.git`
 - Push: `git push https://labanos:<TOKEN>@github.com/labanos/investtracker.git master`
+- Ask Peter for a fresh PAT at the start of the session if needed.
 
 **Never commit a token into any file** — GitHub push protection will block the push and the token will be considered compromised.
 
 ### Step-by-step for a typical feature
 
-1. `git clone https://<token>@github.com/labanos/investtracker.git`
-2. Read `.github/AI_CONTEXT.md` (this file)
-3. Implement the changes
+1. Read `.github/AI_CONTEXT.md` (this file) via MCP
+2. Fetch the relevant GitHub issue via MCP
+3. Implement the changes by reading and updating files via MCP
 4. For PHP changes: keep `%%placeholder%%` credentials — never fill them in
 5. For DB schema changes: append an idempotent migration to `db_migrate.php`
 6. For new PHP write endpoints: use `require_auth($pdo)` from `auth_check.php`
 7. Commit with a descriptive message referencing the issue (e.g. `fix: ... closes #N`)
-8. Push — ask Peter for a write token if needed
-9. GitHub Actions deploys automatically within ~30 seconds
+8. GitHub Actions deploys automatically within ~30 seconds
 
 ### Do not expose real credentials
 
