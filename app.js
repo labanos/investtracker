@@ -32,7 +32,7 @@ function App() {
   const [pendingAction, setPendingAction] = useState(null); // action to run after login
 
   // ── Portfolio from DB ─────────────────────────────────────────────────
-  const portfolioRef = React.useRef(SEED_PORTFOLIO); // used inside fetchPrices
+  const portfolioRef = React.useRef([]); // used inside fetchPrices
   const [portfolio,       setPortfolio]       = useState([]);
   const [portfolioLoaded, setPortfolioLoaded] = useState(false);
 
@@ -41,31 +41,14 @@ function App() {
     fetch(`${PORTFOLIO_API}?portfolio_id=${portfolioId}`)
       .then(r => r.ok ? r.json() : [])
       .then(async rows => {
-        if (rows.length === 0) {
-          // First ever load — seed from SEED_PORTFOLIO
-          const res = await fetch(`${PORTFOLIO_API}?batch=1&portfolio_id=${portfolioId}`, {
-            method: 'POST', headers: authHeaders(),
-            body: JSON.stringify(SEED_PORTFOLIO),
-          });
-          if (res.ok) {
-            const seeded = await res.json();
-            const pf = seeded.map(normalizePfRow);
-            portfolioRef.current = pf;
-            setPortfolio(pf);
-          } else {
-            portfolioRef.current = SEED_PORTFOLIO;
-            setPortfolio(SEED_PORTFOLIO);
-          }
-        } else {
-          const pf = rows.map(normalizePfRow);
-          portfolioRef.current = pf;
-          setPortfolio(pf);
-        }
+        const pf = rows.map(normalizePfRow);
+        portfolioRef.current = pf;
+        setPortfolio(pf);
         setPortfolioLoaded(true);
       })
       .catch(() => {
-        portfolioRef.current = SEED_PORTFOLIO;
-        setPortfolio(SEED_PORTFOLIO);
+        portfolioRef.current = [];
+        setPortfolio([]);
         setPortfolioLoaded(true);
       });
   }, [portfolioId]);
@@ -201,7 +184,7 @@ function App() {
     setPrices({});
     setIsLive(false);
     setSelectedTicker(null);
-    portfolioRef.current = SEED_PORTFOLIO;
+    portfolioRef.current = [];
   }, []);
 
   const requireLogin = useCallback((action) => {
@@ -256,32 +239,11 @@ function App() {
         const grouped = {};
         rows.forEach(t => { (grouped[t.ticker] = grouped[t.ticker] || []).push(t); });
 
-        if (rows.length === 0) {
-          // First ever load — seed from SEED_TRANSACTIONS
-          const flat = [];
-          Object.entries(SEED_TRANSACTIONS).forEach(([ticker, txns]) =>
-            txns.forEach(t => flat.push({ ...t, ticker }))
-          );
-          if (flat.length > 0) {
-            const res = await fetch(`${TRANSACTIONS_API}?batch=1`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(flat),
-            });
-            if (res.ok) {
-              const seeded = await fetch(TRANSACTIONS_API).then(r => r.json());
-              seeded.forEach(t => { (grouped[t.ticker] = grouped[t.ticker] || []).push(t); });
-            }
-          }
-        }
         setAllTxns(grouped);
         setTxnsLoaded(true);
       })
       .catch(() => {
-        const grouped = {};
-        Object.entries(SEED_TRANSACTIONS).forEach(([ticker, txns]) => {
-          grouped[ticker] = txns.map((t, i) => ({ ...t, ticker, id: -(i+1) }));
-        });
-        setAllTxns(grouped);
+        setAllTxns({});
         setTxnsLoaded(true);
       });
   }, [portfolioId]);
