@@ -320,7 +320,7 @@ PHP on Apache shared hosting sometimes has issues with `DELETE`/`PUT` HTTP metho
 `PortfolioChart` does NOT use `portfolio_snapshots` for its chart data. It reconstructs share counts from transaction history and fetches historical prices via the Worker, producing the full portfolio value curve client-side. `portfolio_snapshots` is a separate table for a different use case.
 
 ### FX conversion
-The app applies FX rates client-side to convert all holdings to the portfolio's `base_currency`. The formula is: `fxToBase = fx[stockCcy] / fx[baseCcy]`. FX rates are currently hardcoded as `CACHED_FX` in `index.html` — live FX rates are tracked in issue #4.
+The app applies FX rates client-side to convert all holdings to the portfolio's `base_currency`. The formula is: `fxToBase = fx[stockCcy] / fx[baseCcy]`. FX rates are currently hardcoded as `CACHED_FX` in `index.html` — live FX rates are tracked in the GitHub Issues backlog.
 
 ### Auth token lifecycle
 - Token is 32-byte random hex (`bin2hex(random_bytes(32))`)
@@ -347,22 +347,13 @@ The app applies FX rates client-side to convert all holdings to the portfolio's 
 
 ---
 
-## 📋 Backlog (GitHub Issues)
+## 📋 Backlog
 
 The backlog is tracked entirely in **GitHub Issues**: https://github.com/labanos/investtracker/issues
 
 > **Note:** `TODO.md` is no longer used. Do not update it. All feature requests and bugs live in GitHub Issues.
 
-Current open issues (as of 2026-03-06):
-
-| # | Title |
-|---|---|
-| [#2](https://github.com/labanos/investtracker/issues/2) | Historic returns on closed positions |
-| [#3](https://github.com/labanos/investtracker/issues/3) | Price alerts |
-| [#4](https://github.com/labanos/investtracker/issues/4) | Live FX rates |
-| [#6](https://github.com/labanos/investtracker/issues/6) | Browse and switch between historical DCF model versions in the UI |
-
-When starting a new task, fetch the relevant issue to get its full description and acceptance criteria.
+At the start of each session, fetch the current open issues via the GitHub MCP tool (or the issues URL above) to get the up-to-date backlog. Do not rely on any hardcoded list here.
 
 ---
 
